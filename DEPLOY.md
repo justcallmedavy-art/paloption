@@ -234,6 +234,10 @@ PALOPTION_API_URL=https://<api-host> npm run deploy:snapshot   # writes deploy/p
 npm run deploy:prod                                            # builds + uploads to Vercel
 ```
 
+`deploy:snapshot` runs `npm run build` first, because the landing page embeds
+`dist/styles.css` and `dist/` is gitignored — without that step the command
+fails on a fresh clone with `landing source is missing: dist/styles.css`.
+
 `VITE_API_URL` is accepted as an alias for `PALOPTION_API_URL`. Use the bare
 origin — no trailing slash, no `/api` suffix. An `https` value produces a
 `wss://` socket automatically; on an https page a value that would produce a

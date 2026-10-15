@@ -171,7 +171,12 @@ for (const [from, to] of LANDING) {
   try {
     await stat(abs);
   } catch {
-    throw new Error(`landing source is missing: ${from}`);
+    // `dist/` is generated and gitignored, so on a fresh clone the stylesheet
+    // the landing page embeds does not exist yet and the fix is a build rather
+    // than a fixture. Naming the build here turns a bare missing-file error into
+    // the one command that resolves it.
+    const hint = from.startsWith("dist/") ? " — run `npm run build` to compile it" : "";
+    throw new Error(`landing source is missing: ${from}${hint}`);
   }
   await emit(abs, to);
 }

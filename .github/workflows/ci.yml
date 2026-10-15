@@ -181,13 +181,17 @@ jobs:
       - name: Install (from the lockfile)
         run: npm ci
 
-      # Built the way `npm run deploy:prod` builds it, into a temporary
-      # directory rather than deploy/paloption, so the job judges an artifact and
-      # does not modify the working tree.
+      # Built through the documented command, into a temporary directory rather
+      # than deploy/paloption, so the job judges an artifact and does not modify
+      # the working tree. Going through the npm script is deliberate: it is what
+      # compiles `src/input.css` into the `dist/styles.css` the landing page
+      # embeds, and `dist/` is gitignored, so a runner that called
+      # tools/prepare-deploy.mjs directly would fail on a missing source that
+      # exists on every developer's machine.
       - name: Build the snapshot a deploy would upload
         env:
           PALOPTION_API_URL: ${{ vars.PALOPTION_API_URL || 'https://paloption-api.onrender.com' }}
-        run: node tools/prepare-deploy.mjs --out "$RUNNER_TEMP/snapshot"
+        run: npm run deploy:snapshot -- --out "$RUNNER_TEMP/snapshot"
 
       # One shell, so the server cannot outlive the check. `--no-api-health` is
       # the point of this job: it judges the artifact, and the API it points at
@@ -239,7 +243,7 @@ jobs:
       - name: Build the snapshot the live site should match
         env:
           PALOPTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
-        run: node tools/prepare-deploy.mjs --out "$RUNNER_TEMP/snapshot"
+        run: npm run deploy:snapshot -- --out "$RUNNER_TEMP/snapshot"
 
       # No --no-api-health here: this job runs with the deployment present, and
       # an API that does not answer /healthz with a Postgres ledger fails.
