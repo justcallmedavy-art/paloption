@@ -1021,6 +1021,27 @@ if (usingBuiltInTronWallet) {
 
 const payments = createPaymentRoutes({ store, requireUser });
 
+/*
+ * Deposit reconciliation: chasing deposits whose M-Pesa callback never arrived.
+ *
+ * Off unless the deployment asks for it. Making it automatic would mean any test
+ * run or staging box with credentials in .env.local starts querying Safaricom on
+ * a timer, which is exactly the kind of thing that should never happen by
+ * accident. When it is on, it uses the same settlement path as the callback, so
+ * nothing it does can credit twice — see tools/reconcile.mjs.
+ */
+const reconciler = payments._reconcile;
+const reconcileState = reconciler.status();
+if (reconcileState.enabled) {
+  reconciler.start();
+  console.log(
+    `  reconcile   : enabled — deposits still pending after ${Math.round(reconcileState.config.after_ms / 1000)}s are queried every ` +
+      `${Math.round(reconcileState.config.interval_ms / 1000)}s (up to ${reconcileState.config.max_attempts} attempts, ${reconcileState.config.concurrency} at once)`
+  );
+} else {
+  console.log("  reconcile   : off (MPESA_RECONCILE_ENABLED=1 chases deposits whose callback never arrived)");
+}
+
 const server = http.createServer(async (req, res) => {
   const { pathname } = new URL(req.url, "http://localhost");
   try {
@@ -1263,6 +1284,9 @@ async function shutdown(signal) {
   console.log(`\n${signal} received — stopping the tick engine, the trading socket and the ledger pool`);
 
   clearInterval(tickTimer);
+  // Stop reconciliation next: the run in flight is awaited and its outcome is
+  // recorded, so the pool is never pulled out from under a query.
+  const reconcileStop = reconciler.stop().catch(() => true);
   for (const client of sockets) {
     try {
       wsClose(client.socket, 1001, "server shutting down");
@@ -1280,6 +1304,7 @@ async function shutdown(signal) {
   force.unref();
 
   server.close(async () => {
+    await reconcileStop;
     try {
       await store.close();
     } catch (err) {

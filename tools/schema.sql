@@ -118,8 +118,33 @@ CREATE TABLE IF NOT EXISTS deposits (
   verified_amount      numeric(18,2),
   created_at           timestamptz NOT NULL DEFAULT now(),
   completed_at         timestamptz,
-  CONSTRAINT deposits_status_valid CHECK (status IN ('pending', 'completed', 'failed', 'cancelled'))
+  -- Reconciliation bookkeeping for a deposit whose callback never arrived.
+  -- `recon_attempts` and `next_reconcile_at` live in the row, not in the
+  -- worker's memory, so a restart resumes where it left off and two workers
+  -- cannot both act on the same deposit (the claim is a guarded UPDATE).
+  -- `recon_outcome` is NULL while the deposit is still eligible; once it holds
+  -- a terminal outcome the deposit is never queried again automatically.
+  recon_attempts       integer NOT NULL DEFAULT 0,
+  last_reconciled_at   timestamptz,
+  next_reconcile_at    timestamptz,
+  recon_outcome        text,
+  CONSTRAINT deposits_status_valid CHECK (status IN ('pending', 'completed', 'failed', 'cancelled')),
+  CONSTRAINT deposits_recon_attempts_not_negative CHECK (recon_attempts >= 0)
 );
+-- Added after the first release, so an existing database gets them too. Every
+-- statement here is idempotent, which is what lets schema.sql stay the whole
+-- migration.
+ALTER TABLE deposits ADD COLUMN IF NOT EXISTS recon_attempts     integer NOT NULL DEFAULT 0;
+ALTER TABLE deposits ADD COLUMN IF NOT EXISTS last_reconciled_at timestamptz;
+ALTER TABLE deposits ADD COLUMN IF NOT EXISTS next_reconcile_at  timestamptz;
+ALTER TABLE deposits ADD COLUMN IF NOT EXISTS recon_outcome      text;
+
+-- The reconciliation scan asks one question — "which pending M-Pesa deposits
+-- are due?" — so it gets one partial index rather than a table walk on every
+-- interval.
+CREATE INDEX IF NOT EXISTS deposits_reconciliation_due_idx
+  ON deposits (next_reconcile_at, created_at)
+  WHERE status = 'pending' AND method = 'mpesa' AND recon_outcome IS NULL;
 CREATE INDEX IF NOT EXISTS deposits_user_id_created_at_idx ON deposits (user_id, created_at DESC);
 -- A provider reference identifies one deposit, so a callback carrying it can
 -- never be matched to two.

@@ -139,6 +139,10 @@ const depositFromRow = (r) =>
     mpesa_result_code: r.mpesa_result_code == null ? null : Number(r.mpesa_result_code),
     failure_reason: r.failure_reason,
     verified_amount: num(r.verified_amount),
+    recon_attempts: r.recon_attempts == null ? 0 : Number(r.recon_attempts),
+    last_reconciled_at: iso(r.last_reconciled_at),
+    next_reconcile_at: iso(r.next_reconcile_at),
+    recon_outcome: r.recon_outcome ?? null,
     created_at: iso(r.created_at),
     completed_at: iso(r.completed_at),
   };
@@ -395,6 +399,13 @@ export function createMemoryStore({ db = emptyDb() } = {}) {
     /* deposits */
     async insertDeposit(deposit) {
       gate();
+      // Reconciliation bookkeeping is present from birth here, exactly as the
+      // column defaults make it in Postgres, so a row has the same shape
+      // whichever store handed it back.
+      deposit.recon_attempts ??= 0;
+      deposit.last_reconciled_at ??= null;
+      deposit.next_reconcile_at ??= null;
+      deposit.recon_outcome ??= null;
       state.deposits.unshift(deposit);
       return deposit;
     },
@@ -445,6 +456,50 @@ export function createMemoryStore({ db = emptyDb() } = {}) {
     },
     async listDepositsByUser(userId, limit = 100) {
       return state.deposits.filter((d) => d.user_id === userId).slice(0, limit);
+    },
+
+    /**
+     * The reconciliation scan: pending M-Pesa deposits that are old enough to
+     * have missed a callback and are due to be queried. Mirrors the SQL below
+     * field for field, including the terminal-outcome exclusion.
+     */
+    async listReconcilableDeposits({ now, olderThanMs, limit = 25 } = {}) {
+      const cutoff = Number(now) - Number(olderThanMs);
+      return state.deposits
+        .filter((d) =>
+          d.status === "pending" &&
+          d.method === "mpesa" &&
+          !d.is_demo &&
+          d.checkout_request_id &&
+          !d.recon_outcome &&
+          Date.parse(d.created_at) <= cutoff &&
+          (!d.next_reconcile_at || Date.parse(d.next_reconcile_at) <= Number(now))
+        )
+        .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))
+        .slice(0, limit);
+    },
+
+    /**
+     * Claims one deposit for a query attempt, incrementing the attempt count and
+     * pushing the next attempt out. Returns null when the deposit is no longer
+     * claimable, which is what stops two workers doing the same work.
+     *
+     * The checks and the write happen with no `await` between them, so within
+     * this process the claim is atomic. Across processes it is NOT — that
+     * guarantee comes from the guarded single UPDATE in Postgres, which is the
+     * only deployment shape where two workers exist.
+     */
+    async claimDepositForReconciliation(id, { now, nextAt } = {}) {
+      gate();
+      const deposit = state.deposits.find((d) => d.id === id);
+      if (!deposit) return null;
+      if (deposit.status !== "pending") return null;
+      if (deposit.recon_outcome) return null;
+      if (deposit.next_reconcile_at && Date.parse(deposit.next_reconcile_at) > Number(now)) return null;
+      deposit.recon_attempts = Number(deposit.recon_attempts || 0) + 1;
+      deposit.last_reconciled_at = new Date(Number(now)).toISOString();
+      deposit.next_reconcile_at = new Date(Number(nextAt)).toISOString();
+      return deposit;
     },
 
     /* idempotency */
@@ -809,6 +864,7 @@ export async function createPostgresStore({ connectionString, ssl, poolSize = 10
           "status", "provider_reference", "checkout_request_id", "merchant_request_id",
           "mpesa_result_code", "failure_reason", "verified_amount", "completed_at",
           "settlement_amount", "settlement_rate", "settlement_currency",
+          "recon_attempts", "last_reconciled_at", "next_reconcile_at", "recon_outcome",
         ];
         const sets = [];
         const params = [id];
@@ -831,6 +887,7 @@ export async function createPostgresStore({ connectionString, ssl, poolSize = 10
           "status", "provider_reference", "checkout_request_id", "merchant_request_id",
           "mpesa_result_code", "failure_reason", "verified_amount", "completed_at",
           "settlement_amount", "settlement_rate", "settlement_currency",
+          "recon_attempts", "last_reconciled_at", "next_reconcile_at", "recon_outcome",
         ];
         const sets = [];
         const params = [id];
@@ -852,6 +909,53 @@ export async function createPostgresStore({ connectionString, ssl, poolSize = 10
           [userId, limit]
         );
         return rows.map(depositFromRow);
+      },
+
+      /**
+       * The reconciliation scan. Oldest first, so the deposit that has been
+       * stuck longest is queried first, and bounded by the caller's batch size.
+       * Demo deposits are excluded: no real money moved for them.
+       */
+      async listReconcilableDeposits({ now, olderThanMs, limit = 25 } = {}) {
+        const { rows } = await q(
+          `SELECT * FROM deposits
+            WHERE status = 'pending'
+              AND method = 'mpesa'
+              AND is_demo = false
+              AND checkout_request_id IS NOT NULL
+              AND recon_outcome IS NULL
+              AND created_at <= $1::timestamptz
+              AND (next_reconcile_at IS NULL OR next_reconcile_at <= $2::timestamptz)
+            ORDER BY created_at ASC
+            LIMIT $3`,
+          [new Date(Number(now) - Number(olderThanMs)).toISOString(), new Date(Number(now)).toISOString(), limit]
+        );
+        return rows.map(depositFromRow);
+      },
+
+      /**
+       * Claims one deposit for a query attempt.
+       *
+       * One statement, so the guard cannot be read and then invalidated: the
+       * row is locked, `next_reconcile_at` moves into the future, and a second
+       * worker's identical UPDATE matches zero rows. That is what makes
+       * concurrent workers safe rather than merely unlikely to collide.
+       */
+      async claimDepositForReconciliation(id, { now, nextAt } = {}) {
+        const stamp = new Date(Number(now)).toISOString();
+        const { rows } = await q(
+          `UPDATE deposits
+              SET recon_attempts = recon_attempts + 1,
+                  last_reconciled_at = $1::timestamptz,
+                  next_reconcile_at = $2::timestamptz
+            WHERE id = $3
+              AND status = 'pending'
+              AND recon_outcome IS NULL
+              AND (next_reconcile_at IS NULL OR next_reconcile_at <= $1::timestamptz)
+          RETURNING *`,
+          [stamp, new Date(Number(nextAt)).toISOString(), id]
+        );
+        return depositFromRow(rows[0]);
       },
 
       /* idempotency */

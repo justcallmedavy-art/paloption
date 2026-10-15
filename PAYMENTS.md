@@ -109,6 +109,152 @@ Any non-zero `ResultCode` (the user cancelled, the SIM timed out) fails the
 intent, and a failed deposit can never later be settled. Every delivery is kept
 in `db.mpesa_callbacks` with its outcome, including the duplicates.
 
+### Reconciliation: a deposit whose callback never arrived
+
+A callback that never arrives used to be the end of the story: the intent sat
+`pending` forever while the customer's money had already moved. `stkQuery`
+existed in `tools/daraja.mjs` and was documented as the fix, but **nothing called
+it**. That gap is now closed by `tools/reconcile.mjs`.
+
+**The rule: a query is an investigation, not a payment.** Nothing in the
+reconciler credits a wallet. It asks Safaricom what happened to a
+`CheckoutRequestID` it issued, and then hands the answer to `settleDeposit` —
+the same function, with the same currency and amount validation and the same
+exactly-once guarantee, that the callback uses. There is no second way into the
+ledger.
+
+#### What a real query does, and does not, tell you
+
+The STK query answers with `ResponseCode`, `MerchantRequestID`,
+`CheckoutRequestID`, `ResultCode` and `ResultDesc`:
+
+```json
+{ "ResponseCode": "0", "ResultCode": "0",
+  "ResultDesc": "The service request is processed successfully." }
+
+{ "errorCode": "500.001.1001", "errorMessage": "The transaction is being processed" }
+```
+
+Unlike the callback, it does **not** reliably return `CallbackMetadata`, so it
+usually carries no receipt number and no amount. (Safaricom's portal pages for
+this endpoint render as shells, so this is corroborated by working integrations
+rather than vendor-verified — treat the shape as documented, not promised.)
+
+That single fact drives the whole design, and it is why reconciliation is not
+allowed to just credit a `ResultCode: 0`:
+
+| What came back | What happens | Why |
+|---|---|---|
+| `ResultCode: 0` **with** receipt and amount | Settled, credited once | The same verification a callback gets |
+| `ResultCode: 0`, **no** metadata | `recon_outcome='paid_pending_receipt'`, stays `pending`, logged as a warning | The money moved, but there is nothing to verify against — crediting here would pay out on a claim |
+| Non-zero `ResultCode` | Failed through the **guarded** transition, nothing credited | Provider-confirmed no payment |
+| Timeout, network error, `errorCode`, malformed body, mismatched `CheckoutRequestID`, non-zero `ResponseCode` | Left `pending`, retried with backoff | Inconclusive is not failure |
+| Settlement refused (wrong amount or currency) | `recon_outcome='needs_review'`, nothing credited | Retrying would not change it; a human should look |
+
+A completed deposit is never claimed at all, so a late `ResultCode` cannot
+un-pay money that has already been credited. A failed deposit is never settled.
+An M-Pesa receipt that already identifies another deposit is refused: the
+application checks it in `settleWithin`, and PostgreSQL's unique index on
+`provider_reference` is the backstop under concurrency.
+
+#### Running it
+
+**Off by default.** `MPESA_RECONCILE_ENABLED=1` turns it on in the server, which
+then starts an interval that never overlaps itself and is stopped on `SIGTERM`
+before the ledger pool closes. It is a separate flag rather than "on whenever
+credentials exist" on purpose: a test run or a staging box with keys in
+`.env.local` must not start querying Safaricom by accident.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `MPESA_RECONCILE_ENABLED` | off | Master switch. `1` starts the worker in the server |
+| `MPESA_RECONCILE_AFTER_MS` | `90000` | How long a deposit waits for its callback before being queried |
+| `MPESA_RECONCILE_INTERVAL_MS` | `60000` | How often the scan runs |
+| `MPESA_RECONCILE_BATCH` | `25` | Deposits considered per pass (max 200) |
+| `MPESA_RECONCILE_CONCURRENCY` | `3` | Queries in flight at once (max 10) |
+| `MPESA_RECONCILE_MAX_ATTEMPTS` | `6` | Attempts per deposit before it is marked for review (max 50) |
+| `MPESA_RECONCILE_BACKOFF_MS` | `30000` | First retry delay; doubles each attempt |
+| `MPESA_RECONCILE_MAX_BACKOFF_MS` | `1800000` | Ceiling on the retry delay |
+| `MPESA_RECONCILE_TIMEOUT_MS` | `15000` | Bound on one provider call; a timeout is inconclusive |
+
+**Why 90 seconds.** Safaricom gives no published deadline for a callback; 90s is
+a safety margin so a query does not race the callback that is still on its way
+and come back "still being processed".
+
+**Retry policy.** Attempt 1 happens once the deposit is older than
+`AFTER_MS`; then `BACKOFF_MS`, `2×`, `4×` … capped at `MAX_BACKOFF_MS`. After
+`MAX_ATTEMPTS` inconclusive answers the deposit is marked `needs_review` and
+stops being queried automatically — it is never failed for being unanswerable,
+and never credited for being unverified.
+
+**What is recorded.** Attempts and timestamps live in the deposit row
+(`recon_attempts`, `last_reconciled_at`, `next_reconcile_at`, `recon_outcome`),
+not in the worker's memory, so a redeploy resumes rather than restarting. The
+claim is one guarded `UPDATE`, so two workers — separate processes, separate
+pools — cannot both take the same deposit. Log lines carry the deposit
+reference, the attempt number, the result code and the outcome; never the
+request body (it contains the Daraja password) and never a full provider
+response.
+
+#### Monitoring and recovery
+
+Watch for `recon_outcome` values that need a person:
+
+```sql
+SELECT reference, usd_amount, settlement_amount, recon_attempts, recon_outcome, last_reconciled_at
+  FROM deposits
+ WHERE recon_outcome IN ('paid_pending_receipt', 'needs_review')
+ ORDER BY created_at DESC;
+```
+
+- **`paid_pending_receipt`** — the provider confirmed a payment we could not
+  verify. Check the receipt in the M-Pesa portal for the shortcode, then settle
+  it through the normal path. The deposit is deliberately left `pending`, not
+  failed and not credited.
+- **`needs_review`** — either the provider never gave a usable answer within the
+  attempt limit, or settlement refused the amounts. Both mean a human should
+  look; neither has credited anything.
+
+To chase one specific deposit (bypassing the age threshold), or to see what is
+due without contacting anyone:
+
+```bash
+DATABASE_URL=postgres://... node tools/reconcile-deposits.mjs --dry-run
+DATABASE_URL=postgres://... node tools/reconcile-deposits.mjs --once
+DATABASE_URL=postgres://... node tools/reconcile-deposits.mjs --reference PAL_abc123
+DATABASE_URL=postgres://... node tools/reconcile-deposits.mjs --watch
+```
+
+That CLI is the manual trigger, and it is deliberately **not** an HTTP route: a
+public "reconcile now" endpoint would let anyone drive this server into hammering
+Safaricom. It refuses to run without `DATABASE_URL`, because reconciling against
+a process-local store would be theatre.
+
+#### What is verified here, and what is not
+
+Verified in `tests/reconcile.test.mjs` (19 tests, in-memory store, **mocked
+provider**): the scan finds a stuck deposit; a verified success settles once; a
+confirmed failure credits nothing; a timeout, a provider error, a malformed body
+and a mismatched `CheckoutRequestID` all credit nothing and stay retryable; a
+bare `ResultCode: 0` lands in the review state instead of crediting; an
+underpayment is refused; a reused receipt cannot credit a second deposit; a
+callback and a reconciliation racing settle at most once; a completed deposit is
+never even queried; retry limits and backoff behave as documented; one failing
+query does not stop the batch; an overlapping run is refused; and a restart
+resumes from the persisted attempt count.
+
+The **PostgreSQL** behaviour is verified too, against a real server (PostgreSQL
+16): `tests/postgres/pg-settlement.test.mjs` and `tests/postgres/pg-reconcile.test.mjs`
+— 19 tests — cover what the in-memory run structurally cannot reach: the row
+lock and the partial unique indexes, a claim that only one of two workers can
+take, a receipt that cannot settle a second deposit, a database failure that
+rolls the credit back with the status, and a fresh pool that resumes from the
+persisted attempt count rather than restarting it. `npm run test:postgres`
+refuses to run without `PG_TEST_DATABASE_URL` rather than skipping silently.
+
+No live Safaricom query has been issued: every provider response in these tests
+is a fixture, and no test initiates a payment.
+
 ### What is not verified
 
 The client has only been driven against a stand-in server that speaks Daraja's
@@ -270,16 +416,89 @@ left alone and reported here rather than patched speculatively.
 ## Tests
 
 ```bash
-npm test
+npm test                      # the in-memory suites, including reconciliation
+npm run test:postgres         # needs PG_TEST_DATABASE_URL; refuses to run without it
+npm run test:postgres:stress  # contention at load; needs the same variable
 ```
 
-40 tests. They cover the 15 required behaviours: unauthenticated access, invalid
+Each of those commands runs `tools/check-suites.mjs` first. It refuses when a
+glob would match no test files, because `node --test` exits 0 in that case — and
+a suite that is absent, or written but not committed, must never read as a pass.
+
+148 tests. They cover the 15 required behaviours: unauthenticated access, invalid
 amounts and phone numbers, missing credentials, provider rejection and timeout,
 pending status, genuine settlement from a fixture, duplicate replay, ten
 concurrent settlements of one reference, failed/cancelled deposits, duplicate
 address requests, a missing exchange-rate provider, malformed provider
 responses, cross-user access, crediting an unverified deposit, and database
 rollback.
+
+The 19 reconciliation tests added on top of those are described in the section
+above, and the two PostgreSQL files (`tests/postgres/`) hold the guarantees that
+need a real database: the atomic claim, receipt uniqueness under concurrency, a
+restart that resumes from the database, and rollback.
+
+### A PostgreSQL for the suites, without installing one
+
+Neither PostgreSQL suite falls back to memory — a skipped test that reports
+success would be worse than no test — so they need a server. On a machine with
+none, and without administrator rights, `tools/pg-local.mjs` runs the genuine
+article from official prebuilt binaries in a git-ignored directory: no
+installer, no service registered, nothing in `Program Files`.
+
+```bash
+node tools/pg-local.mjs fetch   # once: ~23 MB of official PostgreSQL binaries -> .tools/pg
+node tools/pg-local.mjs start   # initdb into .data/pgdata if needed, then serve
+node tools/pg-local.mjs url     # creates the test database, prints PG_TEST_DATABASE_URL
+node tools/pg-local.mjs stop    # or: reset, to drop and recreate the test database
+
+PG_TEST_DATABASE_URL="$(node tools/pg-local.mjs url)" npm run test:postgres
+```
+
+It binds to `127.0.0.1` and uses `trust` authentication, which is safe only
+because it listens on loopback alone — never point it at a routable address,
+where reachability would be authorisation.
+
+`start` detaches the server, so it outlives the shell that launched it; stop it
+with `pg-local.mjs stop`. One operational note learned the hard way: on Windows a
+console close or Ctrl+C is delivered to the server's worker processes too, and a
+worker killed mid-statement takes the whole cluster into crash recovery. Start it
+from a terminal you are not about to kill, and stop it deliberately.
+
+### Contention and concurrency (`test:postgres:stress`)
+
+The two PostgreSQL files above prove the guarantees with two actors. The stress
+suite (`tests/postgres/stress/pg-stress.test.mjs`) does the same at load and
+re-checks the ledger-wide invariants after every scenario — credited total equals
+the completed deposits, every credit belongs to its deposit's owner, no account
+overdrawn, no reference with two ledger entries. Scenarios: 2/10/50/100
+simultaneous deliveries of one callback; a callback racing a reconciliation
+worker; several workers over one due list; two different receipts for one
+deposit; one receipt across many deposits; a success and a failure delivered
+together; a timeout followed by a late payment; many accounts at once; an
+injected database failure in mid-batch; and a restart. The run prints a
+per-scenario evidence table.
+
+```bash
+PG_STRESS_CONCURRENCY=24 PG_STRESS_DUPLICATES=2,25,100,200 \
+  PG_TEST_DATABASE_URL="$(node tools/pg-local.mjs url)" npm run test:postgres:stress
+```
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `PG_STRESS_SEED` | `20261015` | fixture seed, printed with the run so a failure reproduces |
+| `PG_STRESS_DUPLICATES` | `2,10,50,100` | simultaneous copies of one callback |
+| `PG_STRESS_CONCURRENCY` | `12` | pools, i.e. genuinely parallel settlements |
+| `PG_STRESS_WORKERS` | `4` | reconciliation workers racing for the same claims |
+| `PG_STRESS_DEPOSITS` | `24` | deposits per batch scenario |
+| `PG_STRESS_ACCOUNTS` | `16` | accounts settling at once |
+
+Start at the defaults and raise one number at a time. The suite refuses to run
+if `PG_TEST_DATABASE_URL` is unset, if it names the same database as
+`DATABASE_URL`, if the database name does not look disposable (unless
+`PG_STRESS_ALLOW_ANY_DB=1`), or if `NODE_ENV=production`. It works in one
+randomly named schema and drops it at the end, so nothing else in the database is
+read or written.
 
 The provider fixtures are **fixtures**. No test contacts Safaricom, a card
 processor or a TRON custodian, and no test result here should be read as

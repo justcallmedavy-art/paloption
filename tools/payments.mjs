@@ -30,6 +30,7 @@
  */
 import crypto from "node:crypto";
 import { createDarajaClient, DarajaError, isBuyGoods } from "./daraja.mjs";
+import { createReconciler, reconcileConfig } from "./reconcile.mjs";
 
 /* ------------------------ TRC20 deposit wallet ------------------------ */
 
@@ -243,6 +244,24 @@ export function defaultProviders() {
       if (!cfg.daraja.configured) return missing("Daraja STK Push")();
       try {
         return await darajaClientFor(cfg).stkPush(request);
+      } catch (err) {
+        if (err instanceof DarajaError) {
+          throw new ApiError(err.status, err.code, err.message, err.details);
+        }
+        throw err;
+      }
+    },
+    /**
+     * The same transport's query endpoint, used only by reconciliation. It asks
+     * what happened to a CheckoutRequestID we issued; it never moves money, and
+     * a deployment without credentials refuses here rather than pretending to
+     * have asked Safaricom anything.
+     */
+    darajaStkQuery: async (request) => {
+      const cfg = config();
+      if (!cfg.daraja.configured) return missing("Daraja STK Query")();
+      try {
+        return await darajaClientFor(cfg).stkQuery(request);
       } catch (err) {
         if (err instanceof DarajaError) {
           throw new ApiError(err.status, err.code, err.message, err.details);
@@ -557,6 +576,8 @@ export function createPaymentRoutes({
   requireUser,
   providers = defaultProviders(),
   exchange = createExchangeRateService(),
+  reconcile = reconcileConfig(),
+  logger = console,
 }) {
   const cfg = config();
   const limit = rateLimiter({ windowMs: 60_000, max: 20 });
@@ -694,6 +715,23 @@ export function createPaymentRoutes({
         throw badRequest("A verified provider reference is required to settle a deposit");
       }
 
+      // A provider reference identifies ONE payment, so it may identify one
+      // deposit. Without this, the same M-Pesa receipt delivered twice — or
+      // reused by a hostile client against a second deposit — would credit a
+      // second wallet for a single payment.
+      //
+      // Postgres refuses this independently, at the unique index on
+      // `provider_reference`; this check is what gives the in-memory store the
+      // same behaviour, and it is the difference between "the database saves us"
+      // and "the application is correct". Under concurrency the database is
+      // still the backstop: the index rejects the loser of the race.
+      if (providerReference) {
+        const owner = await t.findDeposit(providerReference);
+        if (owner && owner.id !== deposit.id) {
+          throw conflict("That M-Pesa receipt is already attached to another deposit, so it cannot settle this one");
+        }
+      }
+
       // Verified against the currency and amount the *provider* settles in, not
       // the USD figure the client sent. Nothing here trusts the browser.
       const settleCurrency = deposit.settlement_currency || deposit.currency;
@@ -745,6 +783,53 @@ export function createPaymentRoutes({
       return { credited: true, deposit: settled, balance };
     }
   }
+
+  /* --------------------------- reconciliation --------------------------- */
+
+  /**
+   * The narrow slice of the store the reconciler needs. It is written out here
+   * rather than passing the whole store, so the reconciler cannot reach for
+   * something it was not meant to touch — and so the tests can hand it a fake.
+   */
+  const reconcileLedger = {
+    listDue: (options) => store.listReconcilableDeposits(options),
+    claim: (id, options) => store.claimDepositForReconciliation(id, options),
+    failIfUnsettled: (id, patch) => store.failDepositIfUnsettled(id, patch),
+    update: (id, patch) => store.updateDeposit(id, patch),
+  };
+
+  /**
+   * The worker that chases deposits whose callback never arrived.
+   *
+   * It is given THIS module's `settleDeposit` — the one function that credits a
+   * wallet — so a reconciled payment and a callback-settled payment go through
+   * the same validation and the same exactly-once guarantee. There is no second
+   * crediting path, deliberately.
+   */
+  const reconciler = createReconciler({
+    ledger: reconcileLedger,
+    settleDeposit,
+    /**
+     * A caller may inject only some providers (the tests do). Asking a missing
+     * one must be a typed refusal the reconciler treats as inconclusive, not a
+     * TypeError — the same honesty the default providers have towards a
+     * deployment with no credentials.
+     */
+    queryProvider: (request) => {
+      const query = providers.darajaStkQuery;
+      if (typeof query !== "function") {
+        throw new ApiError(
+          501,
+          "PROVIDER_INTEGRATION_MISSING",
+          "No Daraja STK query integration is available on this server, so nothing was asked of the provider.",
+          { provider: "Daraja STK Query", docs: "PAYMENTS.md" }
+        );
+      }
+      return query(request);
+    },
+    config: reconcile,
+    logger,
+  });
 
   /* ------------------------------ routes ------------------------------ */
 
@@ -1114,5 +1199,14 @@ export function createPaymentRoutes({
     /** Exposed for the settlement tests only — not routed over HTTP. */
     _settleDeposit: settleDeposit,
     _limit: limit,
+    /**
+     * Reconciliation, deliberately NOT a route.
+     *
+     * Nothing about it is reachable over HTTP: a public "reconcile now" endpoint
+     * would let anyone make this server hammer Safaricom. The server starts its
+     * interval, tools/reconcile.mjs drives it by hand from a shell that already
+     * holds the database credentials, and the tests call it directly.
+     */
+    _reconcile: reconciler,
   };
 }
