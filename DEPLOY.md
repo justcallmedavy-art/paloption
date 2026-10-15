@@ -79,6 +79,7 @@ Set these environment variables on the host:
 | `DARAJA_CALLBACK_URL` | for M-Pesa | `https://<api-host>/api/auth/mpesa/callback/<token>` |
 | `TRON_DEPOSIT_ADDRESS` | before taking deposits | a TRON address **you control**. Left unset, every depositor is shown a wallet hardcoded in the source that is not yours; the boot log warns `WARNING : TRON_DEPOSIT_ADDRESS is not set`. An empty string switches the static wallet off deliberately |
 | `PORT` | no | usually set by the host; defaults to 4174 |
+| `WS_PING_MS` | no | how often the trading socket is pinged at the protocol level; defaults to 25000. A socket that answers nothing for two intervals is dropped, so a connection that died without a close frame does not sit in the host's connection list forever. `1000` makes the tests fast; nothing else needs to move |
 
 ### Render (blueprint included)
 
@@ -246,6 +247,22 @@ when the backend moves:
 <script>globalThis.__PALOPTION_API_URL__ = "https://api.example"</script>
 ```
 
+The page still returns 200 when that value is wrong or missing, and the only
+symptom is a sign-in that cannot work, so check what the bundle actually
+resolves once the deployment is up:
+
+```bash
+npm run verify:frontend -- --url https://paloption.vercel.app \
+                          --expect-api https://<api-host>
+```
+
+It reads the API base out of the deployed chunks rather than searching for
+"localhost" — the client's own wss-upgrade guard contains that string in a
+comparison, so a substring search reports a problem in a correct deployment —
+and it fails on a base that is empty (so the client calls its own host), a
+loopback or rehearsal address, a plain `http://` origin, a bundle that predates
+the `wss://` upgrade, or an API whose `/healthz` is not answering with Postgres.
+
 ## 4. The M-Pesa callback
 
 Safaricom cannot reach localhost, so this only works on a public HTTPS host:
@@ -308,6 +325,23 @@ Add `--register` to also create one throwaway account and prove registration and
 the session it returns work; that is the only variant that writes anything. The
 cashier is deliberately out of scope — it moves money, and its own tool is at the
 end of this section.
+
+The socket half of that is worth knowing when the numbers look frozen rather
+than broken. The client sends `{"type":"ping"}` every 20s and the server answers
+`{"type":"pong"}`; a client that hears nothing at all for 45s closes the socket
+and reconnects, because a half-open connection reports `readyState: OPEN` while
+no price moves. Reconnects back off — 1s, 2s, 4s, 8s, 16s, then 30s, each with up
+to a second of jitter — and the server pings at the protocol level too, so a
+client built before that heartbeat existed is still kept warm and still reaped
+when it dies.
+
+`tools/verify-frontend.mjs` is its counterpart for the *client*, and needs the
+API host to judge against — see §3. It answers the one question the backend
+checker cannot: which host the deployed bundles actually call.
+
+```bash
+npm run verify:frontend -- --url https://paloption.vercel.app --expect-api https://<api-host>
+```
 
 The same checks by hand, against the deployed pair rather than locally:
 
@@ -374,11 +408,14 @@ free credit. It reads `DARAJA_CALLBACK_TOKEN` and never prints it.
 
 ## 7. Known limitations
 
-- **The Postgres path has not been exercised against a live database in this
-  working copy** — the environment has no Docker or local Postgres, so the suite
-  covers the store interface through its in-memory implementation. Run
-  `npm run migrate` against the real database and repeat the checklist in §5;
-  that is what closes this gap.
+- **The hosted deployment has not been exercised yet.** The Postgres path now
+  runs against a real server rather than an in-memory stand-in — thirty-two
+  tests across `npm run test:postgres` and `npm run test:postgres:stress`, in CI
+  on every push and locally via `node tools/pg-local.mjs url` — but every number
+  so far comes from one machine on loopback. A live host adds what no local run
+  can: a managed database, TLS, a real certificate, a proxy, and the cold start
+  a free instance performs. Run `npm run verify:deploy -- --url https://<host>`
+  and the §5 checklist against the real pair; that is what closes this gap.
 - Bot sessions live in memory: a restart stops a running bot. The trades it had
   already opened are unaffected, and the panel shows the last session.
 - **The sandbox never approves the documented test number.** Measured against a
@@ -398,9 +435,12 @@ free credit. It reads `DARAJA_CALLBACK_TOKEN` and never prints it.
   while the money stayed in the wallet. The guard now lives in the statement
   (`failDepositIfUnsettled`, `AND status = 'pending'`), and the contradictory
   delivery is recorded as `ignored_after_settlement` instead.
-- **Restart persistence is only meaningful against Postgres** and has not been
-  demonstrated end to end: the local suite runs the in-memory store, where a
-  restart is expected to lose state. The step in §5 is what proves it.
+- **Restart persistence is demonstrated locally, and still owed on the host.**
+  Against the local PostgreSQL: register, trade, let the tick engine settle,
+  kill the process, start a new one — signing in again returns the same settled
+  balance, the same position row by id, and the same ledger rows. What is *not*
+  yet shown is the same sequence across a Render redeploy, which is the step in
+  §5 that needs the host.
 
 ---
 

@@ -296,10 +296,11 @@ export function patchClientChunk(filename, source) {
   let result = fixTrc20Dependencies(source);
   const banners = applyBannerEdits(result.source, filename);
   const mode = fixTradeModeDefault(banners.source);
+  const socket = patchSocketResilience(mode.source, filename);
   return {
-    source: mode.source,
-    applied: [...result.applied, ...banners.applied, ...mode.applied],
-    skipped: [...result.skipped, ...banners.skipped, ...mode.skipped],
+    source: socket.source,
+    applied: [...result.applied, ...banners.applied, ...mode.applied, ...socket.applied],
+    skipped: [...result.skipped, ...banners.skipped, ...mode.skipped, ...socket.skipped],
   };
 }
 
@@ -434,4 +435,140 @@ export function fixUnparseableErrorMessages(source, filename = "") {
   }
 
   return { source: out, applied, skipped, count };
+}
+
+/* ------------------------------------------------------------------ *
+ * 5. A trading socket that notices it has died
+ *
+ * The mirror opens one socket and, when it closes, comes back on a fixed
+ * three-second timer:
+ *
+ *   s.onclose=()=>{…,t.current=setTimeout(()=>{b()},3e3)}
+ *
+ * On a laptop that is adequate. On a host with a cold start it is three
+ * problems:
+ *
+ *   * Three seconds, forever, with no backoff. A sleeping instance, a redeploy
+ *     or a host that is simply down produces an attempt every three seconds per
+ *     open tab, for as long as the tab lives — and every tab returns in lockstep.
+ *   * Nothing notices a dead link. There is no heartbeat anywhere in the bundle,
+ *     so a half-open connection — a NAT entry that expired, a proxy that dropped
+ *     the flow without a close frame — leaves the UI reporting "connected" over
+ *     a price that has stopped moving, and no event fires to correct it.
+ *   * Nothing keeps the path warm, and an idle connection through a load
+ *     balancer is the first thing reaped silently.
+ *
+ * So the two handlers that already own this socket gain:
+ *
+ *   - a heartbeat: {type:"ping"} every 20s, answered by the server with
+ *     {type:"pong"} (tools/server.mjs), so the connection is never idle and the
+ *     answer is evidence the far end is still there;
+ *   - a watchdog: no frame of any kind for 45s means the socket is dead whatever
+ *     its readyState claims, so it is closed — which lands in the app's own
+ *     onclose, keeps its "Disconnected. Retrying…" UI truthful, and reuses its
+ *     reconnect path rather than inventing a second one;
+ *   - backoff with jitter: 1s, 2s, 4s, 8s, 16s, then 30s, each plus up to a
+ *     second of jitter. The counter resets on any frame actually received,
+ *     which is the only evidence that a connection works — so a host that
+ *     accepts a connection and then dies without a frame is backed off rather
+ *     than hammered.
+ *
+ * The server also pings at the protocol level, so a client built before this
+ * patch is still kept warm and still reaped when it dies.
+ */
+
+/**
+ * How long to wait before the next reconnect, after `attempt` consecutive
+ * failures. Exported because the tests check this arithmetic directly, and
+ * injected into the browser through its own source text by the patch below, so
+ * the function under test and the function that runs cannot drift apart.
+ */
+export function wsRetryDelay(attempt, random = Math.random) {
+  const capped = Math.min(Math.max(1, Math.floor(attempt) || 1), 6);
+  const backoff = Math.min(30_000, 1_000 * 2 ** (capped - 1));
+  return backoff + Math.floor(random() * 1_000);
+}
+
+/** The injected copy of `wsRetryDelay`, defined once per page. */
+const RETRY_DELAY_SRC =
+  `(globalThis.__palOptionRetryDelay||(globalThis.__palOptionRetryDelay=${wsRetryDelay.toString()}))`;
+
+/**
+ * The heartbeat and its watchdog. Written against the chunk's own socket
+ * variable `s`, and deliberately defensive: a socket that throws while being
+ * pinged must not take the app down, so every step is inside one try/catch.
+ */
+const HEARTBEAT_SRC =
+  'globalThis.__palOptionWsSeen=Date.now(),' +
+  's.__palOptionBeat=setInterval(()=>{try{' +
+  'if(Date.now()-(globalThis.__palOptionWsSeen||0)>45e3){s.close();return}' +
+  's.readyState===WebSocket.OPEN&&s.send(JSON.stringify({type:"ping"}))' +
+  '}catch(_){}},2e4)';
+
+/** The retry, after counting one more failure. */
+const RETRY_DELAY_CALL =
+  '(globalThis.__palOptionWsAttempt=(globalThis.__palOptionWsAttempt||0)+1,' +
+  `${RETRY_DELAY_SRC}(globalThis.__palOptionWsAttempt))`;
+
+/**
+ * The three edits, each anchored on a string that occurs exactly once in the
+ * trading chunk. `note` is what gets reported when an anchor is applied, or
+ * when it stops matching — never silently.
+ */
+const SOCKET_EDITS = [
+  {
+    from: 'l.current=!0,n.current=!1;let e=localStorage.getItem("token");',
+    to: `l.current=!0,n.current=!1,${HEARTBEAT_SRC};let e=localStorage.getItem("token");`,
+    note: "trading socket: a heartbeat every 20s and a 45s watchdog on open",
+  },
+  {
+    from: 's.onmessage=e=>{try{let t=JSON.parse(e.data);',
+    to: 's.onmessage=e=>{globalThis.__palOptionWsSeen=Date.now(),globalThis.__palOptionWsAttempt=0;try{let t=JSON.parse(e.data);',
+    note: "trading socket: an inbound frame records liveness and clears the backoff",
+  },
+  {
+    from: 't.current=setTimeout(()=>{b()},3e3)',
+    to: `s.__palOptionBeat&&clearInterval(s.__palOptionBeat),t.current=setTimeout(()=>{b()},${RETRY_DELAY_CALL})`,
+    note: "trading socket: the fixed 3s retry becomes exponential backoff with jitter",
+  },
+];
+
+/** Chunks the mirror carries the trading socket in, so a lost anchor is loud. */
+export const SOCKET_CHUNKS = new Set(["219b97e8e5e970d5.js"]);
+
+/**
+ * Gives the trading socket a heartbeat, a watchdog and a backoff. Safe on any
+ * chunk: one that does not carry the socket is returned untouched with nothing
+ * reported, while the chunk that does carry it reports every anchor that has
+ * stopped matching.
+ */
+export function patchSocketResilience(source, filename = "") {
+  const applied = [];
+  const skipped = [];
+  let out = source;
+
+  for (const edit of SOCKET_EDITS) {
+    const occurrences = out.split(edit.from).length - 1;
+    if (occurrences !== 1) {
+      skipped.push(`${edit.note}: its anchor matched ${occurrences} times, expected exactly once`);
+      continue;
+    }
+    out = out.replace(edit.from, edit.to);
+    applied.push(edit.note);
+  }
+
+  if (applied.length) return { source: out, applied, skipped, count: applied.length };
+
+  // Nothing applied. Only the chunk that really carries the trading socket is
+  // worth a word: for any other chunk this pass simply has no subject, and
+  // three "anchor missing" warnings on every boot would train the reader to
+  // ignore the one that matters.
+  if (SOCKET_CHUNKS.has(filename)) {
+    skipped.push(
+      `${filename}: carries the trading socket in the mirror, but none of its anchors were found in this bundle`
+    );
+    return { source, applied, skipped, count: 0 };
+  }
+
+  return { source, applied: [], skipped: [], count: 0 };
 }

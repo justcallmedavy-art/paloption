@@ -84,7 +84,17 @@ const binary = (name) => join(PG_DIR, "bin", `${name}.exe`);
 const url = (database = TEST_DB) =>
   `postgresql://postgres@${HOST}:${PORT}/${database}`;
 
-const say = (msg) => console.log(msg);
+/**
+ * Progress goes to stderr when stdout is reserved for a captured value.
+ *
+ * `url` prints one line because the documented way to use it is
+ * `PG_TEST_DATABASE_URL="$(node tools/pg-local.mjs url)"`. A status line mixed
+ * into that capture produces a connection string that fails somewhere unrelated
+ * — the hostname parses as "base" — which is the kind of broken that costs an
+ * hour to spot.
+ */
+let stdoutIsReserved = false;
+const say = (msg) => (stdoutIsReserved ? console.error(msg) : console.log(msg));
 
 /* ------------------------------ provisioning ------------------------------ */
 
@@ -314,6 +324,7 @@ try {
   else if (command === "status") await status();
   else if (command === "reset") await reset();
   else if (command === "url") {
+    stdoutIsReserved = true;
     await ensureDatabase();
     // Bare URL on stdout: this is meant to be captured in a shell.
     console.log(url());

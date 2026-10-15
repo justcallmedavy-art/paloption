@@ -22,12 +22,12 @@
  *
  *   client -> server   auth{token}, subscribe{asset}, manual_trade{config},
  *                      auto_trading_start{config}, auto_trading_stop,
- *                      auto_trading_status
+ *                      auto_trading_status, ping
  *   server -> client   price{data}, balance_update{data},
  *                      position_update{action:"add"|"close", data},
  *                      transaction_update{data}, auth_success{data},
  *                      auth_error{data}, auto_trading_update{data},
- *                      auto_trading_response{session}
+ *                      auto_trading_response{session}, pong
  *
  * Two details are easy to get wrong and are load-bearing:
  *   - it is `position_update`, and `action` sits at the message ROOT, not
@@ -535,6 +535,25 @@ function wsClose(socket, code = 1001, reason = "") {
   socket.write(Buffer.concat([Buffer.from([0x88, 2 + text.length]), Buffer.from([code >> 8, code & 0xff]), text]));
 }
 
+/**
+ * A protocol-level ping (RFC 6455 §5.5.2): opcode 0x9, no payload, and frames
+ * from a server are never masked. Browsers answer this themselves, without the
+ * page's JavaScript being involved, which is what makes it work for a client
+ * built before the heartbeat patch in tools/client-patches.mjs existed.
+ */
+function wsPing(socket) {
+  if (!socket.destroyed) socket.write(Buffer.from([0x89, 0x00]));
+}
+
+/**
+ * How often a socket is pinged, and how long a silence is tolerated before it
+ * is reaped. Two intervals lets one answer go missing on a lossy link without
+ * closing a healthy connection; the floor is only there so a test can drive it
+ * in a second rather than a minute.
+ */
+const WS_PING_MS = Math.max(1_000, Number(process.env.WS_PING_MS) || 25_000);
+const WS_IDLE_MS = WS_PING_MS * 2;
+
 function wsParse(buffer) {
   const messages = [];
   let offset = 0;
@@ -557,6 +576,7 @@ function wsParse(buffer) {
     if (mask) for (let i = 0; i < payload.length; i++) payload[i] ^= mask[i % 4];
     if (opcode === 0x8) messages.push({ close: true });
     else if (opcode === 0x1) messages.push({ text: payload.toString("utf8") });
+    else if (opcode === 0xa) messages.push({ pong: true });
     offset = p + len;
   }
   return messages;
@@ -960,6 +980,28 @@ const tickTimer = setInterval(async () => {
   await advanceBots(settled);
 
   for (const client of sockets) {
+    // Liveness, once a second. A socket is pinged on an interval, and one that
+    // has said nothing for two intervals is dropped: without this a connection
+    // that died without a close frame — an expired NAT entry, a proxy that
+    // dropped the flow — stays in `sockets` forever, being counted and written
+    // to, and holding a connection slot on the host open behind it.
+    const now = Date.now();
+    if (now - client.lastSeen > WS_IDLE_MS) {
+      console.log(`[ws] dropping a socket silent for ${Math.round((now - client.lastSeen) / 1000)}s`);
+      try {
+        wsClose(client.socket, 1001, "heartbeat timeout");
+      } catch {
+        /* it was already gone */
+      }
+      client.socket.destroy();
+      sockets.delete(client);
+      continue;
+    }
+    if (now - (client.lastPing || 0) >= WS_PING_MS) {
+      wsPing(client.socket);
+      client.lastPing = now;
+    }
+
     for (const p of PRICES) {
       if (client.asset && client.asset !== p.asset) continue;
       wsSend(client.socket, {
@@ -1117,17 +1159,26 @@ server.on("upgrade", (req, socket) => {
       `Sec-WebSocket-Accept: ${wsAccept(key)}\r\n\r\n`
   );
 
-  const client = { socket, userId: null, asset: null };
+  const client = { socket, userId: null, asset: null, lastSeen: Date.now(), lastPing: 0 };
   sockets.add(client);
 
   // The client sends `subscribe` immediately on open, which triggers its first quote.
 
   socket.on("data", async (buf) => {
+    // Any inbound frame — a message, or the pong the browser sent for the
+    // protocol ping above — is proof this socket is alive, and resets the
+    // reaper in the tick engine.
+    client.lastSeen = Date.now();
     for (const message of wsParse(buf)) {
       if (message.close) return socket.destroy();
       if (!message.text) continue;
       try {
         const msg = JSON.parse(message.text);
+
+        // The client's own heartbeat (tools/client-patches.mjs). It exists so
+        // the client has an answer to watch for; the protocol-level ping in the
+        // tick engine is what keeps a client that predates that patch alive.
+        if (msg.type === "ping") wsSend(socket, { type: "pong" });
 
         if (msg.type === "auth") {
           const authedUserId = msg.token ? await store.userIdForToken(msg.token) : null;
