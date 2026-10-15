@@ -292,6 +292,9 @@ async function check(name, fn) {
   }
 }
 
+/** Whether /healthz identified this service, which some checks need to mean anything. */
+let serviceAlive = false;
+
 await check("the service answers at all", async () => {
   let res;
   try {
@@ -310,6 +313,7 @@ await check("the service answers at all", async () => {
       `${BASE}/healthz returned ${res.status} ${brief(res.text)} — this is not the PalOption service, or it has not deployed`
     );
   }
+  serviceAlive = true;
   record("the service answers at all", "pass", BASE);
 });
 
@@ -616,6 +620,12 @@ await check("the service answers at all", async () => {
   });
 
   await check("no response echoes a credential", async () => {
+    // A host that is not this service cannot pass this. A CDN's 404 page
+    // trivially contains no connection string, and reporting PASS would credit a
+    // deployment that does not exist with a property it never demonstrated.
+    if (!serviceAlive) {
+      return record("no response echoes a credential", "skip", "the service was not identified, so there was nothing to scan");
+    }
     // A heuristic, and reported as one: it looks for the shapes a leaked
     // connection string or API key takes, not for every possible secret.
     const probes = [
