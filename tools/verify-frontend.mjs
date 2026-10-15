@@ -32,6 +32,9 @@
  */
 import https from "node:https";
 import http from "node:http";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 /* --------------------------------- reading ------------------------------- */
@@ -79,6 +82,38 @@ export function isRehearsalBase(base) {
   return /(^|\/\/)(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(base) || /:(4174|8799)\b/.test(base);
 }
 
+/** A short, comparable identity for a bundle, for a report a person can act on. */
+export function bundleDigest(bytes) {
+  return `${bytes.length} bytes ${createHash("sha256").update(bytes).digest("hex").slice(0, 12)}`;
+}
+
+/**
+ * Which served bundles are not the ones this repository builds now.
+ *
+ * The point of the base check above is that a wrong value is invisible from
+ * outside. The same is true of an old value: a frontend deployed before the last
+ * client patch answers 200, carries a plausible API base, and quietly lacks the
+ * fix. So when the caller has built a fresh snapshot, compare bytes.
+ *
+ * `served` is `[{ path, bytes }]` and `expected(path)` returns the fresh build's
+ * buffer for that path, or null. Pure, so the tests drive it with fixtures — the
+ * failures it must report are the interesting part, not the fetching.
+ */
+export function compareWithBuild(served, expected) {
+  const differences = [];
+  for (const bundle of served) {
+    const want = expected(bundle.path);
+    if (!want) {
+      differences.push(`${bundle.path}: not in the fresh build (live ${bundleDigest(bundle.bytes)})`);
+      continue;
+    }
+    if (!want.equals(bundle.bytes)) {
+      differences.push(`${bundle.path}: live ${bundleDigest(bundle.bytes)}, fresh build ${bundleDigest(want)}`);
+    }
+  }
+  return differences;
+}
+
 /* --------------------------------- verdict ------------------------------- */
 
 /**
@@ -86,7 +121,7 @@ export function isRehearsalBase(base) {
  * network. `bases` is what `apiBasesIn` found across every chunk, `health` is
  * the `--expect-api` probe (null when it was not asked for).
  */
-export function assessFrontend({ bases, socketOk, expectApi = "", health = null }) {
+export function assessFrontend({ bases, socketOk, expectApi = "", health = null, buildDiffs = null, apiHealthSkipped = null }) {
   const checks = [];
   const record = (name, status, detail) => checks.push({ name, status, detail });
 
@@ -137,6 +172,28 @@ export function assessFrontend({ bases, socketOk, expectApi = "", health = null 
     socketOk ? "getWsUrl derives /ws from the same base and upgrades to wss on an https page" : "the socket base or its wss upgrade is missing"
   );
 
+  // A separate check from the wss one, because they fail for different reasons:
+  // a bundle in the upstream form predates the API-base override entirely, which
+  // is a deployment that was never rebuilt from this repository's tooling.
+  const patchedForm = bases.some((b) => b.form === "patched");
+  record(
+    "the bundles carry this repository's client patches",
+    patchedForm ? "pass" : "fail",
+    patchedForm
+      ? `the API-base override is present (${bases.filter((b) => b.form === "patched").length} chunk(s))`
+      : "every chunk is in the pre-patch form — this snapshot was built before the URL override, so it cannot be re-pointed and its socket never upgrades"
+  );
+
+  if (buildDiffs === null) {
+    record("the served bundles are the ones this repository builds now", "skip", "needs --expect-build <snapshot dir>");
+  } else {
+    record(
+      "the served bundles are the ones this repository builds now",
+      buildDiffs.length ? "fail" : "pass",
+      buildDiffs.length ? `${buildDiffs.length} bundle(s) differ: ${buildDiffs.slice(0, 3).join("; ")}` : "every served chunk is byte-identical to a fresh build"
+    );
+  }
+
   if (expectApi && health) {
     const ok = health.status === 200 && health.json?.ok === true && health.json?.storage === "postgres";
     record(
@@ -144,6 +201,8 @@ export function assessFrontend({ bases, socketOk, expectApi = "", health = null 
       ok ? "pass" : "fail",
       ok ? `/healthz: storage=${health.json.storage}` : `HTTP ${health.status} ${JSON.stringify(health.json)?.slice(0, 90)}`
     );
+  } else if (apiHealthSkipped) {
+    record("the API the client points at is live and backed by Postgres", "skip", apiHealthSkipped);
   } else if (expectApi) {
     record("the API the client points at is live and backed by Postgres", "skip", "the health check could not be performed");
   } else {
@@ -177,7 +236,17 @@ function request(url, { timeout = 20_000, follow = 3 } = {}) {
     const parsed = new URL(url);
     const client = parsed.protocol === "https:" ? https : http;
     const req = client.get(
-      { protocol: parsed.protocol, hostname: parsed.hostname, port: parsed.port || undefined, path: parsed.pathname + parsed.search, timeout },
+      {
+        protocol: parsed.protocol,
+        hostname: parsed.hostname,
+        port: parsed.port || undefined,
+        path: parsed.pathname + parsed.search,
+        timeout,
+        // No Accept-Encoding: bytes are compared against a local build further
+        // down, so a compressed body would be compared against an uncompressed
+        // one and reported as a difference that is not there.
+        headers: { "Accept-Encoding": "identity" },
+      },
       (res) => {
         const chunks = [];
         res.on("data", (c) => chunks.push(c));
@@ -192,7 +261,12 @@ function request(url, { timeout = 20_000, follow = 3 } = {}) {
             }
             return;
           }
-          resolve({ status, headers: res.headers, text: Buffer.concat(chunks).toString("utf8"), url });
+          // Both forms of the body: the string for reading the bundle, the
+          // bytes for comparing it with a build. Decoding is unconditional on
+          // purpose — a caller that asks for bytes and then reads `.text` must
+          // not be handed null, which is a mistake this made once already.
+          const body = Buffer.concat(chunks);
+          resolve({ status, headers: res.headers, bytes: body, text: body.toString("utf8"), url });
         });
       }
     );
@@ -218,7 +292,17 @@ export async function run(argv = process.argv.slice(2)) {
   };
 
   if (flag("help") || !argv.length) {
-    console.log("usage: node tools/verify-frontend.mjs --url https://<frontend> [--path /trade] [--expect-api https://<api>] [--json]");
+    console.log(
+      [
+        "usage: node tools/verify-frontend.mjs --url https://<frontend> [options]",
+        "",
+        "  --path /trade              which page to read (default /trade)",
+        "  --expect-api <origin>      the API origin the bundles must resolve; also probed at /healthz",
+        "  --no-api-health            do not probe the API (an artifact gate does not need it to exist yet)",
+        "  --expect-build <dir>       a snapshot to compare the served bundles against, byte for byte",
+        "  --json                     the report as JSON",
+      ].join("\n")
+    );
     return argv.length ? 0 : 1;
   }
 
@@ -230,6 +314,8 @@ export async function run(argv = process.argv.slice(2)) {
   const BASE = target.replace(/\/+$/, "");
   const PATHNAME = valueOf("path") || "/trade";
   const EXPECT_API = (valueOf("expect-api") || "").replace(/\/+$/, "");
+  const NO_API_HEALTH = flag("no-api-health");
+  const EXPECT_BUILD = valueOf("expect-build");
   const AS_JSON = flag("json");
   /** A page references a handful of chunks; this bounds a runaway. */
   const MAX_CHUNKS = 40;
@@ -238,6 +324,8 @@ export async function run(argv = process.argv.slice(2)) {
   const record = (name, status, detail) => checks.push({ name, status, detail });
   let bases = [];
   let socketOk = false;
+  /** Every referenced bundle, kept whole so it can be compared with a build. */
+  const served = [];
 
   try {
     const page = await request(BASE + PATHNAME);
@@ -259,6 +347,7 @@ export async function run(argv = process.argv.slice(2)) {
           scanned += 1;
           bases.push(...apiBasesIn(chunk.text));
           if (socketFollowsApi(chunk.text)) socketOk = true;
+          served.push({ path: src, bytes: chunk.bytes });
         } catch (err) {
           failures.push(`${src}: ${brief(err.message)}`);
         }
@@ -266,8 +355,25 @@ export async function run(argv = process.argv.slice(2)) {
       record("every referenced bundle could be read", failures.length ? "fail" : "pass", failures.length ? failures.slice(0, 3).join("; ") : `${scanned} chunk(s) fetched`);
     }
 
+    /**
+     * A fresh build to compare against. Read once per bundle, and a file that
+     * cannot be read counts as a difference rather than as agreement — an
+     * unreadable build must not turn into a pass.
+     */
+    let buildDiffs = null;
+    if (EXPECT_BUILD) {
+      const root = EXPECT_BUILD.replace(/[\\/]+$/, "");
+      const bodies = await Promise.all(
+        served.map((bundle) => readFile(join(root, ...bundle.path.replace(/^\/+/, "").split("/"))).catch(() => null))
+      );
+      buildDiffs = compareWithBuild(
+        served,
+        (path) => bodies[served.findIndex((b) => b.path === path)] ?? null
+      );
+    }
+
     let health = null;
-    if (EXPECT_API) {
+    if (EXPECT_API && !NO_API_HEALTH) {
       try {
         const res = await request(EXPECT_API + "/healthz");
         let json = null;
@@ -281,7 +387,16 @@ export async function run(argv = process.argv.slice(2)) {
         health = { status: 0, json: null, error: brief(err.message) };
       }
     }
-    checks.push(...assessFrontend({ bases, socketOk, expectApi: EXPECT_API, health }));
+    checks.push(
+      ...assessFrontend({
+        bases,
+        socketOk,
+        expectApi: EXPECT_API,
+        health,
+        buildDiffs,
+        apiHealthSkipped: NO_API_HEALTH && EXPECT_API ? "not checked (--no-api-health: an artifact gate does not need the API to exist yet)" : null,
+      })
+    );
   } catch (err) {
     record("the frontend could be reached", "fail", brief(err.message));
     checks.push(
@@ -297,7 +412,23 @@ export async function run(argv = process.argv.slice(2)) {
   const skipped = checks.filter((c) => c.status === "skip");
 
   if (AS_JSON) {
-    console.log(JSON.stringify({ url: BASE, path: PATHNAME, expectApi: EXPECT_API || null, checks, passed: passed.length, failed: failed.length, skipped: skipped.length }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          url: BASE,
+          path: PATHNAME,
+          expectApi: EXPECT_API || null,
+          expectBuild: EXPECT_BUILD || null,
+          apiHealthProbed: Boolean(EXPECT_API) && !NO_API_HEALTH,
+          checks,
+          passed: passed.length,
+          failed: failed.length,
+          skipped: skipped.length,
+        },
+        null,
+        2
+      )
+    );
   } else {
     for (const check of checks) {
       console.log(`${check.status === "pass" ? "PASS" : check.status === "skip" ? "SKIP" : "FAIL"}  ${check.name} — ${check.detail}`);

@@ -19,7 +19,7 @@
  */
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { apiBasesIn, socketFollowsApi, isRehearsalBase, assessFrontend, resolveRedirect } from "../tools/verify-frontend.mjs";
+import { apiBasesIn, socketFollowsApi, isRehearsalBase, assessFrontend, resolveRedirect, compareWithBuild, bundleDigest } from "../tools/verify-frontend.mjs";
 
 /** What tools/client-patches.mjs writes into a chunk, with `base` baked in. */
 const patched = (base) =>
@@ -94,6 +94,36 @@ describe("what counts as a rehearsal base", () => {
   });
 });
 
+describe("stale bundles", () => {
+  // `expected` is handed the path exactly as it appears in the page — with its
+  // leading slash — because that is the form the served side is reported in.
+  const build = (files) => (path) => files[path] ?? null;
+
+  test("identical bundles are not reported", () => {
+    const served = [{ path: "/_next/static/chunks/a.js", bytes: Buffer.from("same") }];
+    assert.deepEqual(compareWithBuild(served, build({ "/_next/static/chunks/a.js": Buffer.from("same") })), []);
+  });
+
+  test("a changed bundle is reported with both identities, so it can be diagnosed", () => {
+    const served = [{ path: "/_next/static/chunks/a.js", bytes: Buffer.from("live-and-different") }];
+    const diffs = compareWithBuild(served, build({ "/_next/static/chunks/a.js": Buffer.from("built") }));
+    assert.equal(diffs.length, 1);
+    assert.match(diffs[0], /a\.js: live \d+ bytes [0-9a-f]{12}, fresh build \d+ bytes [0-9a-f]{12}/);
+  });
+
+  test("a bundle the build does not contain is a difference, not agreement", () => {
+    const served = [{ path: "/_next/static/chunks/old.js", bytes: Buffer.from("whatever") }];
+    const diffs = compareWithBuild(served, build({}));
+    assert.equal(diffs.length, 1);
+    assert.match(diffs[0], /not in the fresh build/);
+  });
+
+  test("the digest distinguishes two buffers of equal length", () => {
+    assert.notEqual(bundleDigest(Buffer.from("aaaa")), bundleDigest(Buffer.from("bbbb")));
+    assert.match(bundleDigest(Buffer.from("aaaa")), /^4 bytes [0-9a-f]{12}$/);
+  });
+});
+
 describe("the verdict", () => {
   test("a correct split deployment passes every check", () => {
     const checks = assessFrontend({
@@ -161,5 +191,44 @@ describe("the verdict", () => {
   test("the health check is skipped, not passed, when no API was named", () => {
     const checks = assessFrontend({ bases: apiBasesIn(patched(PROD)), socketOk: true });
     assert.equal(named(checks, "is live and backed by Postgres").status, "skip");
+  });
+
+  test("an artifact gate skips the API probe with its reason, never with a pass", () => {
+    const checks = assessFrontend({
+      bases: apiBasesIn(patched(PROD)),
+      socketOk: true,
+      expectApi: PROD,
+      buildDiffs: [],
+      apiHealthSkipped: "not checked (--no-api-health: an artifact gate does not need the API to exist yet)",
+    });
+    const ledger = named(checks, "is live and backed by Postgres");
+    assert.equal(ledger.status, "skip", "a skipped probe must not read as a pass");
+    assert.match(ledger.detail, /--no-api-health/);
+  });
+
+  test("a pre-patch bundle is called stale rather than merely insecure", () => {
+    const checks = assessFrontend({ bases: apiBasesIn(upstream(PROD)), socketOk: false });
+    const patches = named(checks, "client patches");
+    assert.equal(patches.status, "fail");
+    assert.match(patches.detail, /built before the URL override/);
+  });
+
+  test("served bundles that differ from a fresh build fail the deployment", () => {
+    const checks = assessFrontend({
+      bases: apiBasesIn(patched(PROD)),
+      socketOk: true,
+      expectApi: PROD,
+      buildDiffs: ["/_next/static/chunks/a.js: live 10 bytes aaaaaa000000, fresh build 12 bytes bbbbbb111111"],
+    });
+    const stale = named(checks, "this repository builds now");
+    assert.equal(stale.status, "fail");
+    assert.match(stale.detail, /a\.js/);
+  });
+
+  test("matching bundles pass, and an unchecked comparison is skipped", () => {
+    const matched = assessFrontend({ bases: apiBasesIn(patched(PROD)), socketOk: true, buildDiffs: [] });
+    assert.equal(named(matched, "this repository builds now").status, "pass");
+    const unchecked = assessFrontend({ bases: apiBasesIn(patched(PROD)), socketOk: true });
+    assert.equal(named(unchecked, "this repository builds now").status, "skip");
   });
 });

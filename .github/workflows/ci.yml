@@ -6,9 +6,11 @@
 # PAYMENTS.md, "A PostgreSQL for the suites"), so a green run here means the
 # same thing a green run there does.
 #
-#   regression   npm test                     148 tests, no database needed
+#   regression   npm test                     178 tests, no database needed
 #   postgres     npm run test:postgres         19 tests, real PostgreSQL
 #                npm run test:postgres:stress  13 tests, contention at load
+#   frontend     npm run verify:frontend      the built client's API base, from the bundles
+#   frontend-live  the same check against the deployed pair, once it exists
 #
 # WHAT MUST NOT HAPPEN, and how it is prevented:
 #
@@ -34,6 +36,17 @@
 #     purpose, which is why CI behaves the same as a machine that has real keys.
 #   * A failing test fails the job: `run` steps fail on a non-zero exit, and no
 #     step uses `|| true` or `continue-on-error`.
+#   * A frontend that cannot reach its API must not pass as a working site. The
+#     client is a static snapshot, so the only link to the backend is a value
+#     baked into its bundles at build time — and a wrong or missing one still
+#     returns 200 on every page while making sign-in impossible, which is the
+#     failure the `frontend` job exists to catch. It reads that value out of the
+#     built chunks rather than grepping for "localhost", because the client's own
+#     wss-upgrade guard contains that string in a comparison. The `frontend-live`
+#     job repeats the check against the deployed pair, including a byte
+#     comparison with a fresh build, so a redeploy that never happened fails
+#     rather than passing quietly. It needs two repository variables to know what
+#     to judge and is skipped until they are set.
 name: CI
 
 on:
@@ -153,3 +166,86 @@ jobs:
 
       - name: Contention and concurrency at load
         run: npm run test:postgres:stress
+
+  frontend:
+    name: Built client carries the production API base
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install (from the lockfile)
+        run: npm ci
+
+      # Built the way `npm run deploy:prod` builds it, into a temporary
+      # directory rather than deploy/paloption, so the job judges an artifact and
+      # does not modify the working tree.
+      - name: Build the snapshot a deploy would upload
+        env:
+          PALOPTION_API_URL: ${{ vars.PALOPTION_API_URL || 'https://paloption-api.onrender.com' }}
+        run: node tools/prepare-deploy.mjs --out "$RUNNER_TEMP/snapshot"
+
+      # One shell, so the server cannot outlive the check. `--no-api-health` is
+      # the point of this job: it judges the artifact, and the API it points at
+      # may not exist yet — probing it here would make every push fail until a
+      # backend is live. The deployed pair is checked by `frontend-live`.
+      - name: The bundles carry the expected API base, and match this build
+        env:
+          PALOPTION_API_URL: ${{ vars.PALOPTION_API_URL || 'https://paloption-api.onrender.com' }}
+        run: |
+          # The server's output goes to a file on purpose: a process that
+          # outlives this shell while still holding its stdout keeps the step's
+          # output stream open, and the step then hangs until the job times out
+          # rather than failing.
+          npx http-server "$RUNNER_TEMP/snapshot" -p 4181 -c-1 --silent > "$RUNNER_TEMP/http-server.log" 2>&1 &
+          server=$!
+          trap 'kill $server 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            curl -sf -o /dev/null http://127.0.0.1:4181/trade/ && break
+            sleep 1
+          done
+          npm run verify:frontend -- --url http://127.0.0.1:4181 \
+            --expect-api "$PALOPTION_API_URL" \
+            --no-api-health \
+            --expect-build "$RUNNER_TEMP/snapshot"
+
+  frontend-live:
+    name: Deployed frontend calls the deployed API
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Activates once there is a deployment to judge: set both repository
+    # variables (Settings -> Secrets and variables -> Actions -> Variables) and
+    # this runs on every push to main. Until then it is skipped, which is visible
+    # as a skip rather than counted as a pass.
+    if: ${{ vars.PRODUCTION_FRONTEND_URL != '' && vars.PRODUCTION_API_URL != '' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install (from the lockfile)
+        run: npm ci
+
+      # The snapshot the deployed bundles should be identical to. If they are
+      # not, the frontend was never redeployed after the client bundle changed —
+      # which is exactly the stale-deploy failure a green 200 hides.
+      - name: Build the snapshot the live site should match
+        env:
+          PALOPTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
+        run: node tools/prepare-deploy.mjs --out "$RUNNER_TEMP/snapshot"
+
+      # No --no-api-health here: this job runs with the deployment present, and
+      # an API that does not answer /healthz with a Postgres ledger fails.
+      - name: The live site, its API base, its socket and its backend
+        run: >-
+          npm run verify:frontend --
+          --url "${{ vars.PRODUCTION_FRONTEND_URL }}"
+          --expect-api "${{ vars.PRODUCTION_API_URL }}"
+          --expect-build "$RUNNER_TEMP/snapshot"

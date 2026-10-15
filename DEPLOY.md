@@ -343,6 +343,16 @@ checker cannot: which host the deployed bundles actually call.
 npm run verify:frontend -- --url https://paloption.vercel.app --expect-api https://<api-host>
 ```
 
+CI runs both halves without being asked. The `frontend` job builds the snapshot
+on every push and judges the built bundles — no live backend needed, so it can
+run before you have deployed anything. The `frontend-live` job judges this
+deployed pair and stays skipped until two repository variables exist
+(Settings → Secrets and variables → Actions → Variables):
+`PRODUCTION_FRONTEND_URL` and `PRODUCTION_API_URL`. Set them after the first
+deploy and it runs on every push to `main`, failing on a bundle that was never
+redeployed or an API that is not answering — which is the difference between a
+site that is up and a site that works.
+
 The same checks by hand, against the deployed pair rather than locally:
 
 ```bash

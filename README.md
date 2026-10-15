@@ -30,14 +30,39 @@ npm start                             # PORT=8080 NODE_ENV=production
 
 ## Continuous integration
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs three suites on every
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs four jobs on every
 push to `main` and every pull request. None of them needs a credential:
 
-| Suite | Command | Needs |
+| Job | Command | Needs |
 | --- | --- | --- |
 | Regression | `npm test` | nothing — in-memory, every provider response is a fixture |
 | Settlement and reconciliation | `npm run test:postgres` | the job's disposable `postgres:16` service |
 | Contention and concurrency | `npm run test:postgres:stress` | the same service, at load |
+| Built client | `npm run verify:frontend` | nothing — it builds the frontend snapshot and judges it |
+
+The fourth job exists because a frontend cannot fail visibly. The client is a
+static snapshot whose only link to the backend is a value baked into its bundles
+when they are built, so a snapshot built without `PALOPTION_API_URL` answers 200
+on every page and then calls its own host, which returns `404 NOT_FOUND` — a
+sign-in that cannot work, from the outside indistinguishable from a working site.
+The job builds the snapshot the way `npm run deploy:prod` does, serves it, and
+reads that value back out of the chunks: it fails on an empty or same-origin
+base, a loopback or plain-`http` base, a bundle that predates the client patches,
+and any served bundle that differs byte-for-byte from the build.
+
+The same check against the *deployed* pair is a fifth job, `frontend-live`, and
+it is skipped until you give it something to judge. Set both repository variables
+(Settings → Secrets and variables → Actions → Variables):
+
+| Variable | Value |
+| --- | --- |
+| `PRODUCTION_FRONTEND_URL` | e.g. `https://paloption.vercel.app` |
+| `PRODUCTION_API_URL` | e.g. `https://paloption-api.onrender.com` |
+
+Once they are set it runs on every push to `main` and fails on a stale deploy
+(the served bundles differ from a fresh build of the same commit) or a backend
+that does not answer `/healthz` with a Postgres ledger. `PALOPTION_API_URL`,
+unset, defaults to the host `render.yaml` provisions.
 
 The database job starts a throwaway PostgreSQL, applies the real schema with
 `npm run migrate`, and only then runs the two database suites against
@@ -58,7 +83,7 @@ a suite is absent. Without that, a suite that was written but never committed
 would produce a green pipeline that ran none of it — CI only ever sees committed
 files.
 
-### Running the same three suites locally
+### Running the same checks locally
 
 ```bash
 npm test                        # no database needed
