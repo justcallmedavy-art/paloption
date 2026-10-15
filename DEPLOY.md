@@ -83,26 +83,40 @@ Set these environment variables on the host:
 ### Render (blueprint included)
 
 `render.yaml` provisions the service **and** its Postgres together. It requests
-the **free** plans, so read the note at the top of that file before you deploy:
-the web service spins down after 15 minutes idle — which drops the trading
-socket and stops the tick engine, and loses a running bot session with the
-process — and the free database expires 30 days after creation, with a 14-day
-grace period before deletion ([render.com/docs/free](https://render.com/docs/free)).
-Open positions survive the sleep; they settle on a guard inside the SQL
-statement rather than on a timer a sleeping process holds.
+the **free** plans, and a free instance is not merely smaller: the web service
+spins down after 15 minutes idle — which drops the trading socket and stops the
+tick engine, and loses a running bot session with the process — and the free
+database expires 30 days after creation, with a 14-day grace period before
+deletion ([render.com/docs/free](https://render.com/docs/free)). Open positions
+survive the sleep; they settle on a guard inside the SQL statement rather than on
+a timer a sleeping process holds.
+
+Note that this file does not decide where your frontend lives. Step 3 does, and
+the two possible answers need opposite `ALLOWED_ORIGINS`.
 
 The steps:
 
 1. Push this repository to GitHub.
 2. Render → **New → Blueprint** → pick the repository.
-3. Render reads `render.yaml` and asks for the `sync: false` values: leave
-   `ALLOWED_ORIGINS` **empty** (this service serves the client, so its requests
-   are same-origin), set `TRON_DEPOSIT_ADDRESS` to a wallet you control (or leave
-   it empty only if you do not want to offer USDT deposits at all — unset means
-   depositors are shown a built-in wallet that is not yours), and fill in the
-   `DARAJA_*` credentials you have. The rest of the M-Pesa set can stay blank
-   and be filled in later — see §4, the callback URL does not exist until the
-   service does.
+3. Render reads `render.yaml` and asks for the `sync: false` values:
+
+   - **`ALLOWED_ORIGINS`** — this depends on which shape you are deploying, and
+     getting it wrong is the failure that looks like a broken login:
+     - **Client stays on Vercel** (the split shape, and what the Railway section
+       describes): set it to the frontend's origin exactly,
+       `https://paloption.vercel.app` — no trailing slash. Without it every
+       browser request to this API is `403 ORIGIN_NOT_ALLOWED`, sign-in
+       included.
+     - **This service serves the client too** (one origin): leave it **empty**.
+       A same-origin request is accepted with no value at all, and setting a
+       wrong one here would refuse the requests the app makes to itself.
+   - **`TRON_DEPOSIT_ADDRESS`** — a wallet you control, because this one moves
+     money. Set it to an empty string only if you do not want to offer USDT
+     deposits at all; leaving it **unset** shows depositors a wallet built into
+     the source that is not yours.
+   - **`DARAJA_*`** — fill in what you have, or leave blank. Anything left blank
+     makes the cashier answer `503 PAYMENT_PROVIDER_NOT_CONFIGURED`, which is
+     the honest state. The callback URL cannot be set yet — see §4.
 
    Confirm what the instance decided at boot: the log prints
    `WARNING : TRON_DEPOSIT_ADDRESS is not set …` whenever the built-in wallet is
@@ -111,9 +125,14 @@ The steps:
 4. Deploy. The health check polls `/healthz`, which reports which storage is in
    use, so a deployment that lost its database shows as unhealthy rather than
    quietly serving from memory.
-5. That URL is now the whole app. Open it and stop here unless you are keeping a
-   frontend on another host — the server's boot log says
-   `api base : same-origin`, and the trading socket follows it.
+5. Depending on which shape you chose:
+   - **Client on Vercel:** that URL is the API, not the app. Rebuild the
+     frontend against it (§3) and redeploy, or the site keeps calling itself and
+     every sign-in fails. The boot log should read
+     `api base : same-origin` either way — the *client* is what gets pointed at
+     the API host, not the server.
+   - **One origin:** that URL is the whole app. Open it and stop here; the
+     trading socket follows the same origin.
 
 ### Railway (the split deployment: client on Vercel, API here)
 
