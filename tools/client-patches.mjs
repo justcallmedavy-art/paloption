@@ -362,3 +362,76 @@ export function patchApiBase(source, base) {
 export function apiBaseFromEnv(env = process.env) {
   return (env.PALOPTION_API_URL || env.VITE_API_URL || "").trim().replace(/\/+$/, "");
 }
+
+/* ------------------------------------------------------------------ *
+ * 4. An error message that can actually be reached
+ *
+ * Every failed auth request in the mirror is written like this:
+ *
+ *   if(!i.ok)throw Error((await i.json()).error||"Registration failed")
+ *
+ * The fallback after `||` can never run for the one case that matters. When no
+ * API is behind the frontend — a static host answering POST /api/auth/register
+ * with an HTML 404 — `i.json()` throws BEFORE the `||` is evaluated, so the
+ * sentence the author wrote is unreachable and the visitor gets the browser's
+ * own parser complaint instead:
+ *
+ *   Unexpected token 'T', "The page c"... is not valid JSON
+ *
+ * Nothing in that string is actionable, and it is what a frontend deployed
+ * without its backend shows anyone who tries to sign up or sign in. This pass
+ * makes the fallback reachable: read the body defensively, keep the server's
+ * own `error` field when the body IS JSON, and otherwise report the status
+ * rather than the parser's objection.
+ *
+ * Twelve occurrences across the three auth chunks carry this idiom — login,
+ * 2FA verification, demo sign-in and registration.
+ */
+const AUTH_ERROR_IDIOM = /(\w+)\.ok\)throw Error\(\(await \1\.json\(\)\)\.error\|\|"([^"]*)"\)/g;
+
+/**
+ * The replacement keeps the original sentence as the prefix, so a legitimate
+ * refusal still reads exactly as before ("Login failed"), and appends the
+ * status only when the body could not be read at all.
+ */
+const authErrorTo = (ident, message) =>
+  [
+    `${ident}.ok)throw Error(await(async()=>{`,
+    `try{let _r=await ${ident}.json();return _r&&_r.error||${JSON.stringify(message)}}`,
+    `catch(_e){return ${JSON.stringify(message)}+": the service did not answer (HTTP "+${ident}.status+")."}`,
+    `})())`,
+  ].join("");
+
+/** Chunks the mirror currently carries this idiom in. */
+export const AUTH_ERROR_CHUNKS = new Set([
+  "35132007189b6b68.js",
+  "373e15cf050e0fc3.js",
+  "5856812966db7242.js",
+]);
+
+/**
+ * Rewrites every unreachable auth error message in a chunk.
+ *
+ * Safe on any chunk: one without the idiom is returned untouched and reports
+ * zero edits — except for the chunks known to carry it, where finding none
+ * means the bundle changed shape and is reported rather than passed over
+ * silently, because the whole point is that this fix cannot quietly stop
+ * applying.
+ */
+export function fixUnparseableErrorMessages(source, filename = "") {
+  const applied = [];
+  const skipped = [];
+  let count = 0;
+
+  const out = source.replace(AUTH_ERROR_IDIOM, (match, ident, message) => {
+    count += 1;
+    applied.push(`"${message}": an unparseable body now reports the status instead of the parser`);
+    return authErrorTo(ident, message);
+  });
+
+  if (!count && AUTH_ERROR_CHUNKS.has(filename)) {
+    skipped.push(`${filename}: carries this idiom in the mirror, but none was found in this bundle`);
+  }
+
+  return { source: out, applied, skipped, count };
+}

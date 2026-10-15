@@ -57,6 +57,7 @@ import {
   patchApiBase,
   patchClientChunk,
   apiBaseFromEnv,
+  fixUnparseableErrorMessages,
   isPatchableChunk,
   isRecolorable,
   isRecolorableImage,
@@ -438,15 +439,25 @@ async function servedBytes(file) {
   // Every chunk that carries the client's URL module gets its API/WebSocket base,
   // so this client can be served from one host while the API lives on another.
   let apiEdits = 0;
+  let errorEdits = 0;
   if (ext === ".js") {
     const applied = patchApiBase(source, apiBaseFromEnv());
     source = applied.source;
     apiEdits = applied.count;
     if (apiEdits) console.log(`[client-patch] ${name}: API base -> ${apiBaseFromEnv() || "same-origin"}`);
+
+    // Without this, a frontend with no API behind it answers every failed
+    // sign-in and sign-up with "Unexpected token 'T', "The page c"... is not
+    // valid JSON" — the browser's parser complaint instead of a sentence.
+    const messages = fixUnparseableErrorMessages(source, name);
+    source = messages.source;
+    errorEdits = messages.count;
+    for (const note of messages.skipped) console.warn(`[client-patch] SKIPPED ${name}: ${note}`);
+    if (errorEdits) console.log(`[client-patch] ${name}: ${errorEdits} unreachable error message(s) made reachable`);
   }
 
   // Nothing changed — hand back the file exactly as it sits on disk.
-  if (!edits && !patchable && !apiEdits) return readFile(file);
+  if (!edits && !patchable && !apiEdits && !errorEdits) return readFile(file);
 
   const bytes = Buffer.from(source);
   transformedFiles.set(file, bytes);

@@ -33,6 +33,7 @@ import {
   isRecolorableImage,
   patchApiBase,
   patchClientChunk,
+  fixUnparseableErrorMessages,
   apiBaseFromEnv,
 } from "./client-patches.mjs";
 
@@ -120,7 +121,16 @@ async function transform(absSource, outRel) {
     source = patched.source;
     apiEdits = patched.count;
   }
-  return { buffer: Buffer.from(source), edits, applied, skipped, apiEdits };
+  // Makes the client's own "…failed" fallback reachable, so a frontend served
+  // without its API reports that instead of the browser's JSON parse error.
+  let errorEdits = 0;
+  if (apiPatchable) {
+    const patched = fixUnparseableErrorMessages(source, name);
+    source = patched.source;
+    errorEdits = patched.count;
+    skipped.push(...patched.skipped);
+  }
+  return { buffer: Buffer.from(source), edits, applied, skipped, apiEdits, errorEdits };
 }
 
 const staging = join(tmpdir(), `paloption-snapshot-${process.pid}`);
