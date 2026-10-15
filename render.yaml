@@ -34,8 +34,15 @@ services:
         fromDatabase:
           name: paloption-db
           property: connectionString
-      # The frontend's origin. Without it the browser's requests are refused
-      # with ORIGIN_NOT_ALLOWED.
+      # Leave this EMPTY for the single-origin deployment: this service serves
+      # the client itself (site/ is in the repository), so the browser's
+      # requests are same-origin and are accepted with no ALLOWED_ORIGINS at
+      # all. Measured, not assumed — tools/server.mjs:225 accepts an origin
+      # whose host matches the Host the request arrived on.
+      #
+      # Set it only when the client stays on a different host, e.g.
+      # https://paloption.vercel.app, or that host's requests are refused with
+      # ORIGIN_NOT_ALLOWED.
       - key: ALLOWED_ORIGINS
         sync: false
       # Kept out of the client: the callback path carries this token, and it is

@@ -1,6 +1,22 @@
 # Deploying PalOption
 
-Two deployments, one API:
+**One origin is the recommended shape, and it needs no frontend deployment.**
+`site/` is in this repository, and `tools/server.mjs` serves it alongside the
+API, so a single backend host gives you the whole application:
+
+```
+browser ──https──> paloption-api.onrender.com   (client + /api/* + /ws)
+                       │
+                       └──> Postgres
+```
+
+Nothing has to be built or uploaded, `ALLOWED_ORIGINS` stays empty, and the
+client's API base resolves to same-origin — which is what the service prints at
+boot (`api base : same-origin`). Go through §1, §2 and §4, then skip §3 and read
+§5 with `WEB` set to your API host.
+
+The split layout below is the alternative, and it costs you a CORS
+configuration plus a frontend rebuild whenever the API moves:
 
 | Piece | Where | What runs |
 | --- | --- | --- |
@@ -52,7 +68,7 @@ Set these environment variables on the host:
 | --- | --- | --- |
 | `DATABASE_URL` | yes | the Postgres connection string above |
 | `NODE_ENV` | yes | `production` — refuses to boot without `DATABASE_URL` |
-| `ALLOWED_ORIGINS` | yes | the frontend origin, e.g. `https://paloption.vercel.app` (no trailing slash; comma separate several) |
+| `ALLOWED_ORIGINS` | only for a split deployment | the frontend origin, e.g. `https://paloption.vercel.app` (no trailing slash; comma separate several). **Leave it empty when this service also serves the client** — its requests are same-origin and are accepted with no value at all, which is what the single-origin deployment wants |
 | `DARAJA_ENV` | for M-Pesa | `sandbox` until you are live |
 | `DARAJA_CONSUMER_KEY` / `DARAJA_CONSUMER_SECRET` | for M-Pesa | from your Daraja app |
 | `DARAJA_SHORTCODE` / `DARAJA_PASSKEY` | for M-Pesa | the paybill shortcode and its passkey |
@@ -66,11 +82,17 @@ Set these environment variables on the host:
 
 1. Push this repository to GitHub.
 2. Render → **New → Blueprint** → pick the repository.
-3. Render reads `render.yaml` and asks for the `sync: false` values: set
-   `ALLOWED_ORIGINS` and the `DARAJA_*` credentials.
+3. Render reads `render.yaml` and asks for the `sync: false` values: leave
+   `ALLOWED_ORIGINS` **empty** (this service serves the client, so its requests
+   are same-origin) and fill in the `DARAJA_*` credentials you have. The rest of
+   the M-Pesa set can stay blank and be filled in later — see §4, the callback
+   URL does not exist until the service does.
 4. Deploy. The health check polls `/healthz`, which reports which storage is in
    use, so a deployment that lost its database shows as unhealthy rather than
    quietly serving from memory.
+5. That URL is now the whole app. Open it and stop here unless you are keeping a
+   frontend on another host — the server's boot log says
+   `api base : same-origin`, and the trading socket follows it.
 
 ### Railway
 
@@ -102,10 +124,18 @@ curl -s https://<api-host>/healthz
 `"storage":"memory"` means `DATABASE_URL` did not reach the process — fix that
 before going further, because an in-memory ledger loses every trade on restart.
 
-## 3. Frontend
+## 3. Frontend (only when it is on another host)
 
-The client reads its API host from a value baked into the bundle. Build the
-snapshot with the API origin set, then upload it:
+**Skip this section for the single-origin deployment.** The service serves
+`site/` already, so there is nothing to build, upload, or point anywhere.
+
+For a frontend on its own host, the client reads its API host from a value baked
+into the bundle. Build the snapshot with the API origin set, then upload it:
+
+> Whichever shape you pick, `ALLOWED_ORIGINS` must match it. A client on
+> `paloption.vercel.app` calling an API on another host is refused with
+> `403 ORIGIN_NOT_ALLOWED` until that host is listed *and* the frontend is
+> rebuilt against it.
 
 ```bash
 PALOPTION_API_URL=https://<api-host> npm run deploy:snapshot   # writes deploy/paloption
@@ -176,10 +206,11 @@ Run these against the deployed pair, not locally:
 
 ```bash
 API=https://<api-host>
-WEB=https://paloption.vercel.app
+WEB=$API                     # single origin; use the Vercel host if you kept one
 
 curl -s $API/healthz                                    # {"ok":true,"storage":"postgres"}
-curl -s $WEB -o /dev/null -w '%{http_code}\n'           # 200
+curl -s $WEB -o /dev/null -w '%{http_code}\n'           # 200 — the client is served here
+curl -s -H "Origin: $API" $API/api/auth/exchange-rate    # 200, same-origin accepted
 curl -s -H "Origin: $WEB" $API/api/auth/exchange-rate    # CORS grant present
 curl -s -H "Origin: https://evil.example" $API/api/auth/exchange-rate   # 403 ORIGIN_NOT_ALLOWED
 ```
