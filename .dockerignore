@@ -1,0 +1,17 @@
+# Never in an image: credentials, local ledger state, or files the server reads
+# from the environment instead.
+.env.local
+.data
+.logs
+.tools
+node_modules
+
+# Dev-only: the Vercel snapshot is built and uploaded separately, and the tests
+# and Tailwind toolchain are not part of the running service.
+deploy
+tests
+dist
+src
+.git
+.freebuff
+*.log

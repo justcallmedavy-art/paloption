@@ -1,0 +1,33 @@
+{
+  "name": "paloption-clone",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static clone of the PalOption landing page (paloptions.com)",
+  "scripts": {
+    "build": "tailwindcss -i ./src/input.css -o ./dist/styles.css --minify",
+    "dev": "tailwindcss -i ./src/input.css -o ./dist/styles.css --watch",
+    "serve": "http-server -p 4173 -c-1 .",
+    "serve:mirror": "node tools/server.mjs",
+    "mirror": "node tools/mirror.mjs",
+    "recolor": "node tools/recolor.mjs",
+    "recolor:check": "node tools/recolor.mjs --check",
+    "test": "node --test tests/*.test.mjs",
+    "start": "node tools/server.mjs",
+    "migrate": "node tools/migrate.mjs",
+    "deploy:snapshot": "node tools/prepare-deploy.mjs",
+    "deploy:api": "node tools/prepare-api.mjs",
+    "deploy:api:check": "node tools/prepare-api.mjs --check",
+    "deploy:preview": "node tools/prepare-deploy.mjs && npx vercel deploy deploy/paloption",
+    "deploy:prod": "node tools/prepare-deploy.mjs && npx vercel deploy deploy/paloption --prod"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1",
+    "tailwindcss": "^3.4.17"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

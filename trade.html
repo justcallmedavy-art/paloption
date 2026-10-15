@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="./dist/styles.css" />
+    <title>Trade - PalOption</title>
+    <link rel="icon" href="./favicon.ico" sizes="32x32" type="image/x-icon" />
+  </head>
+  <body class="antialiased font-sans bg-page text-primary min-h-screen">
+    <div class="min-h-screen bg-page text-primary">
+      <!-- ==================== top bar ==================== -->
+      <header class="sticky top-0 z-40 border-b border-line bg-panel/85 backdrop-blur-xl">
+        <div class="flex items-center justify-between gap-3 px-4 h-14">
+          <a href="index.html" class="flex items-center gap-2.5 shrink-0">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #ff4d2e, #2563eb)">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-[17px] h-[17px] text-white"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /><polyline points="16 7 22 7 22 13" /></svg>
+            </div>
+            <span class="text-[17px] font-bold text-primary hidden sm:block">PalOption</span>
+          </a>
+
+          <div class="flex items-center gap-1 rounded-lg p-1 bg-field border border-line">
+            <button data-mode="demo" class="mode-btn px-3 py-1.5 rounded-md text-xs font-semibold text-white transition" style="background: #ff4d2e">Demo</button>
+            <button data-mode="real" class="mode-btn px-3 py-1.5 rounded-md text-xs font-semibold text-muted transition">Real</button>
+          </div>
+
+          <div class="flex items-center gap-2 sm:gap-3">
+            <div class="text-right hidden sm:block">
+              <div class="text-[10px] uppercase tracking-wider text-subtle" data-context>Demo Account</div>
+              <div class="text-sm font-bold tabular-nums text-primary" data-balance>$10,000.00</div>
+            </div>
+            <a href="wallet.html" class="px-3.5 py-2 text-xs font-semibold text-white rounded-lg transition" style="background: #ff4d2e">Deposit</a>
+
+            <div class="relative">
+              <button id="user-menu-btn" class="flex items-center gap-2 p-1.5 rounded-lg transition hover:bg-white/5">
+                <div class="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold" style="background: linear-gradient(135deg, #ff4d2e, #2563eb)" data-user-initial>D</div>
+              </button>
+              <div id="user-menu" class="hidden absolute right-0 top-full mt-2 w-56 bg-card border border-line rounded-xl shadow-2xl overflow-hidden z-50">
+                <div class="px-4 py-3 border-b border-line">
+                  <div class="text-sm font-semibold text-primary" data-user-name>Demo Trader</div>
+                  <div class="text-[11px] text-subtle" data-user-email>demo@example.com</div>
+                </div>
+                <button id="reset-demo" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-muted hover:bg-white/5 transition">Reset Demo Balance</button>
+                <button id="toggle-2fa" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-muted hover:bg-white/5 transition">Account settings</button>
+                <a href="wallet.html" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-muted hover:bg-white/5 transition">Transactions</a>
+                <button id="logout" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-rose-500 hover:bg-rose-500/10 transition border-t border-line">Sign out</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- ==================== workspace ==================== -->
+      <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr_320px] gap-px bg-line">
+        <!-- ---------- asset list ---------- -->
+        <aside class="bg-panel lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+          <div class="p-3 border-b border-line">
+            <div class="relative">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+              <input id="asset-search" type="text" placeholder="Search market" class="w-full bg-field border border-line rounded-lg pl-9 pr-3 py-2 text-sm text-primary placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#FF4D2E]/40" />
+            </div>
+          </div>
+          <div id="asset-list" class="divide-y divide-white/[0.04]"></div>
+        </aside>
+
+        <!-- ---------- chart + positions ---------- -->
+        <main class="bg-page min-w-0">
+          <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-line">
+            <div class="flex items-center gap-3">
+              <div id="asset-badge" class="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold text-white" style="background: #f7931a">B</div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span id="asset-symbol" class="text-sm font-bold text-primary">BTC/USD</span>
+                  <div class="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/10 rounded">
+                    <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                    <span class="text-[9px] font-bold text-emerald-500">LIVE</span>
+                  </div>
+                </div>
+                <span id="asset-name" class="text-[10px] text-subtle">Bitcoin / US Dollar</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <div id="asset-price" class="text-lg font-bold tabular-nums text-emerald-500">$43,256.78</div>
+              <div id="asset-change" class="text-[11px] font-bold text-emerald-500">+0.00%</div>
+            </div>
+          </div>
+
+          <div class="p-4">
+            <div class="rounded-xl overflow-hidden relative bg-deep border border-line">
+              <div class="absolute inset-0 flex flex-col justify-between py-3 pointer-events-none">
+                <div class="w-full border-t border-white/[0.03]"></div>
+                <div class="w-full border-t border-white/[0.03]"></div>
+                <div class="w-full border-t border-white/[0.03]"></div>
+                <div class="w-full border-t border-white/[0.03]"></div>
+                <div class="w-full border-t border-white/[0.03]"></div>
+              </div>
+              <svg id="chart" class="w-full h-56 sm:h-72 relative z-10" viewBox="0 0 500 160" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="chartGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop id="chartGradTop" offset="0%" stop-color="#22c55e" stop-opacity="0.16" />
+                    <stop offset="100%" stop-color="#22c55e" stop-opacity="0" />
+                  </linearGradient>
+                </defs>
+                <path id="chart-area" d="M0,80 L500,80 L500,160 L0,160 Z" fill="url(#chartGrad)" />
+                <path id="chart-line" d="M0,80 L500,80" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                <circle id="chart-dot" cx="500" cy="80" r="4" fill="#22c55e" />
+              </svg>
+              <div id="last-digit" class="absolute top-2 right-2 px-2.5 py-1 rounded text-[11px] font-bold tabular-nums bg-black/40 backdrop-blur text-primary">last digit: 8</div>
+            </div>
+
+            <!-- positions / history / transactions -->
+            <div class="mt-4">
+              <div class="flex items-center gap-1 border-b border-line">
+                <button data-tab="open" class="tab-btn px-3.5 py-2.5 text-xs font-semibold border-b-2 border-[#FF4D2E] text-primary">Open Positions <span id="open-count" class="text-subtle">(0)</span></button>
+                <button data-tab="history" class="tab-btn px-3.5 py-2.5 text-xs font-semibold border-b-2 border-transparent text-muted">History</button>
+                <button data-tab="transactions" class="tab-btn px-3.5 py-2.5 text-xs font-semibold border-b-2 border-transparent text-muted">Transactions</button>
+              </div>
+
+              <div id="tab-open" class="py-1"></div>
+              <div id="tab-history" class="hidden py-1"></div>
+              <div id="tab-transactions" class="hidden py-1"></div>
+            </div>
+          </div>
+        </main>
+
+        <!-- ---------- order panel ---------- -->
+        <aside class="bg-panel lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+          <div class="p-4 space-y-4">
+            <div>
+              <div class="text-[11px] font-bold uppercase tracking-wider text-subtle mb-2">Contract Type</div>
+              <div class="grid grid-cols-2 gap-1.5" id="contract-types">
+                <button data-contract="rise_fall" class="contract-btn px-3 py-2 rounded-lg text-xs font-semibold border border-line bg-field text-primary transition">Rise / Fall</button>
+                <button data-contract="over_under" class="contract-btn px-3 py-2 rounded-lg text-xs font-semibold border border-line bg-field text-muted transition">Over / Under</button>
+                <button data-contract="even_odd" class="contract-btn px-3 py-2 rounded-lg text-xs font-semibold border border-line bg-field text-muted transition">Even / Odd</button>
+                <button data-contract="match_differ" class="contract-btn px-3 py-2 rounded-lg text-xs font-semibold border border-line bg-field text-muted transition">Match / Differ</button>
+              </div>
+              <p id="contract-help" class="mt-2 text-[11px] leading-relaxed text-subtle">Predict if the price will rise or fall by expiry.</p>
+            </div>
+
+            <!-- digit selector (over/under + match/differ) -->
+            <div id="digit-picker" class="hidden">
+              <div class="text-[11px] font-bold uppercase tracking-wider text-subtle mb-2">Last Digit Prediction</div>
+              <div class="grid grid-cols-5 gap-1.5" id="digit-grid"></div>
+            </div>
+
+            <div>
+              <div class="text-[11px] font-bold uppercase tracking-wider text-subtle mb-2">Stake Amount</div>
+              <div class="flex items-center gap-1.5">
+                <button data-stake-step="-10" class="w-9 h-10 rounded-lg border border-line bg-field text-muted font-bold text-sm">−</button>
+                <input id="stake" type="number" min="0.1" step="0.1" value="10" class="flex-1 h-10 bg-field border border-line rounded-lg text-center text-sm font-semibold text-primary focus:outline-none focus:ring-2 focus:ring-[#FF4D2E]/40" />
+                <button data-stake-step="10" class="w-9 h-10 rounded-lg border border-line bg-field text-muted font-bold text-sm">+</button>
+              </div>
+              <div class="flex gap-1.5 mt-2">
+                <button data-stake-set="5" class="flex-1 py-1.5 rounded-md border border-line bg-field text-[11px] font-semibold text-muted">$5</button>
+                <button data-stake-set="10" class="flex-1 py-1.5 rounded-md border border-line bg-field text-[11px] font-semibold text-muted">$10</button>
+                <button data-stake-set="50" class="flex-1 py-1.5 rounded-md border border-line bg-field text-[11px] font-semibold text-muted">$50</button>
+                <button data-stake-set="100" class="flex-1 py-1.5 rounded-md border border-line bg-field text-[11px] font-semibold text-muted">$100</button>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-subtle">Duration</span>
+                <span id="duration-label" class="text-[11px] font-semibold text-primary">5 ticks</span>
+              </div>
+              <div class="flex gap-1.5" id="duration-grid"></div>
+            </div>
+
+            <div class="rounded-xl p-3 bg-field border border-line space-y-1.5">
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-muted">Payout rate</span>
+                <span id="payout-rate" class="font-semibold text-primary">92%</span>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-muted">Potential payout</span>
+                <span id="potential" class="font-bold tabular-nums text-emerald-500">$19.20</span>
+              </div>
+            </div>
+
+            <div id="min-warning" class="hidden px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-500">Minimum stake amount is $0.10</div>
+
+            <div id="order-buttons" class="grid grid-cols-2 gap-2"></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <script src="./js/app.js"></script>
+    <script src="./js/trade.js"></script>
+  </body>
+</html>

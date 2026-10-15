@@ -1,0 +1,286 @@
+# Deposits — what is real, what is not
+
+This documents the money paths behind the cashier in the mirrored client. Read
+the first table before assuming anything works.
+
+## The honest summary
+
+| Capability | State |
+| --- | --- |
+| Request validation (amount bounds, Kenyan MSISDN, card shape) | **real** |
+| Deposit state machine + auditable ledger | **real** |
+| Idempotency and settle-exactly-once | **real**, concurrency tested |
+| Per-user ownership checks | **real** |
+| USD amount vs KES settlement separation | **real** |
+| USD/KES exchange rate | **real**, live provider, cached |
+| Daraja STK Push | **implemented** — real OAuth, STK Push and STK Query; sandbox or production by config |
+| The M-Pesa result callback | **implemented** — token-authenticated, settles through `settleDeposit`, idempotent |
+| Card processing | **not integrated** — 503 without credentials, 501 with them |
+| TRC20 custody / address allocation | **static operator wallet** — a real address is served; no custodian is contacted |
+| Crediting a wallet | **never** without a verified settlement (see below) |
+
+No test contacts a live provider: every provider is either a fixture or, for
+Daraja, pointed at a stand-in server that speaks the documented shapes.
+
+Daraja is the one integration that is actually implemented. Nothing here proves
+a card processor or a TRON custodian works — those still refuse rather than
+pretend — and no live sandbox payment has been completed yet, so treat the
+M-Pesa path as **ready to test, not as proven**. See the end of the Daraja
+section.
+
+## Why credentials alone are not enough
+
+Each provider is represented by exactly one injectable transport in
+[tools/payments.mjs](tools/payments.mjs):
+
+```
+providers.darajaStkPush          providers.cardCharge          providers.tronDepositAddress
+```
+
+`darajaStkPush` is implemented for real — see the next section. The other two
+deliberately **refuse**, so for those there are two distinct outcomes, and they
+are not interchangeable:
+
+| Situation | Response |
+| --- | --- |
+| No credentials | `503 PAYMENT_PROVIDER_NOT_CONFIGURED` (+ `required_env`) |
+| Credentials, no integration | `501 PROVIDER_INTEGRATION_MISSING` |
+
+Injecting a transport is also what makes the intent flow testable, so the parts
+that *are* real are covered by tests rather than asserted in a comment.
+
+## M-Pesa (Daraja) — implemented
+
+The transport is real: OAuth, STK Push and STK Query live in
+[tools/daraja.mjs](tools/daraja.mjs) and are wrapped by
+`defaultProviders().darajaStkPush`. Nothing on the way out is stubbed.
+
+### Credentials
+
+Register on the [Safaricom developer portal](https://developer.safaricom.co.ke/),
+create an app, and put these in `.env.local` — which is git-ignored and read at
+startup by [tools/server.mjs](tools/server.mjs). Never in a tracked file, and
+never in the client.
+
+| Variable | Notes |
+| --- | --- |
+| `DARAJA_CONSUMER_KEY` | app consumer key |
+| `DARAJA_CONSUMER_SECRET` | app consumer secret |
+| `DARAJA_SHORTCODE` | the business shortcode (paybill or till) |
+| `DARAJA_PASSKEY` | Lipa na M-Pesa passkey |
+| `DARAJA_CALLBACK_URL` | **publicly reachable HTTPS** URL for the result |
+| `DARAJA_CALLBACK_TOKEN` | secret path segment the callback requires |
+| `DARAJA_ENV` | `sandbox` (default) or `production` |
+| `DARAJA_TRANSACTION_TYPE` | `buygoods` for a till, otherwise paybill |
+| `DARAJA_PARTY_B` | the till number, when it differs from the shortcode |
+| `DARAJA_TIMEOUT_MS` | default 15000 |
+| `DARAJA_BASE_URL` | override the Safaricom host (tests, dry runs) |
+
+The callback URL must be
+`${publicOrigin}/api/auth/mpesa/callback/${DARAJA_CALLBACK_TOKEN}`.
+
+### A till is Buy Goods, and that is the whole difference
+
+One field changes: `TransactionType` is `CustomerBuyGoodsOnline` for a till and
+`CustomerPayBillOnline` otherwise, with the till number in `PartyB`. Set
+`DARAJA_TRANSACTION_TYPE=buygoods` and `DARAJA_PARTY_B=<till>`, or the request is
+accepted-looking and never reaches the merchant.
+
+### Sandbox first, then production
+
+`DARAJA_ENV=sandbox` targets `sandbox.safaricom.co.ke`; `production` targets
+`api.safaricom.co.ke`. The sandbox shortcode, passkey and test MSISDN are
+sandbox-only — production needs the merchant's own shortcode and passkey, from an
+app that has been through go-live.
+
+### The callback is public, and that is the risk
+
+Safaricom has no Bearer token to send, so `POST /api/auth/mpesa/callback/:token`
+is authenticated two other ways: an unguessable path token, compared in constant
+time, and the `CheckoutRequestID` having to match a deposit **this server**
+created. Even then the body is not treated as proof of payment. `settleDeposit`
+still enforces the settlement currency and amount and credits exactly once, so a
+replayed or forged notification cannot top up a wallet twice. An unknown
+`CheckoutRequestID`, a `ResultCode` of 0 with no receipt, and an amount below the
+deposit all leave the deposit **pending for reconciliation** rather than
+crediting.
+
+Any non-zero `ResultCode` (the user cancelled, the SIM timed out) fails the
+intent, and a failed deposit can never later be settled. Every delivery is kept
+in `db.mpesa_callbacks` with its outcome, including the duplicates.
+
+### What is not verified
+
+The client has only been driven against a stand-in server that speaks Daraja's
+documented shapes — including a full run through the real server process, from
+prompt to credited wallet. Nothing has touched Safaricom and no live sandbox
+payment has completed. Version 3 of the API has no publicly verified rate limit
+or documented callback-redelivery policy, so treat both as unknown: that is
+exactly why settlement is idempotent and why an unverifiable callback leaves the
+deposit pending instead of guessing.
+
+## Enabling cards
+
+Set `CARD_PROVIDER` and `CARD_SECRET_KEY` (and `CARD_RETURN_URL` if the
+processor needs one), then implement `providers.cardCharge` against the
+processor's server-side API.
+
+Card data never reaches this server's storage or logs: `readCardFields` +
+`validateCardFields` reduce a submission to `{brand, last4, expiry}` and discard
+the PAN, CVC and cardholder name, and the raw body is never logged. Keep it that
+way — for PCI scope, the card should ideally go straight from the browser to the
+processor and this server should only see the resulting intent.
+
+**Do not treat card deposits as supported until a real processor is configured
+and a charge has been verified end to end.**
+
+## Enabling USDT (TRC20)
+
+There are two ways to give the panel an address, and neither one invents one.
+
+### A static operator wallet (what this mirror ships)
+
+Set `TRON_DEPOSIT_ADDRESS` to a TRON address you control. The mirrored server
+defaults it to `DEFAULT_TRON_DEPOSIT_ADDRESS` in
+[tools/payments.mjs](tools/payments.mjs) — the wallet baked into this fork — so
+the USDT (TRC20) panel shows a real address out of the box. Set the variable to
+an empty string to disable the static wallet and fall back to the provider path
+below (or to the honest `503` when there is none).
+
+This is a **shared** receiving wallet, not per-account custody. Every account is
+shown the same address, so a deposit cannot be attributed by the address it was
+sent to. Attribution therefore still requires an on-chain confirmation you
+verify yourself, and `settleDeposit` still refuses anything it cannot verify.
+
+Two behaviours worth knowing:
+
+- re-pointing the wallet reaches accounts that already have one — a cached
+  address that no longer matches the configured wallet is treated as stale and
+  replaced, so nobody is left depositing to a wallet you stopped using;
+- a malformed address is refused with `500 TRON_ADDRESS_INVALID` and is never
+  cached or echoed back.
+
+### A custody provider
+
+Set `TRON_WALLET_PROVIDER` and `TRON_API_KEY`, then implement
+`providers.tronDepositAddress` to allocate (or look up) an address for the
+account. The surrounding guarantees are already in place:
+
+- one address per account, cached indefinitely;
+- concurrent callers share a single allocation, so a UI that asks twice still
+  allocates once;
+- a cached address does not consume the rate limit.
+
+The server will never generate a random string and call it a deposit address.
+Deposits must settle from an on-chain confirmation you verify yourself — never
+from a client-submitted transaction hash or a screenshot.
+
+## Crediting a wallet
+
+`settleDeposit` is the only function that moves money, and it is deliberately
+hard to satisfy. It refuses a deposit that is:
+
+- already `completed` → returns `{credited:false, reason:"already_settled"}`
+- `failed` or `cancelled` → `409 CONFLICT`
+- missing a verified provider reference → `400`
+- missing a verified amount → `400`
+- verified in a currency that is not the deposit's settlement currency → `400`
+- verified for less than the settlement amount → `400`
+
+It is serialised through a mutex, so ten concurrent settlements of one reference
+credit exactly once, and it snapshots state and rolls back if the write fails —
+a failed settlement can never leave a credited-but-unsaved balance.
+
+Amounts are stored in two currencies on purpose:
+
+```
+amount              USD  what the user deposits and what we credit
+settlement_currency KES  what the provider actually charges
+settlement_amount   1300 for a $10 deposit at 130 USD/KES
+settlement_rate     130  the rate used, kept for audit
+```
+
+Confusing the two is how a $10 deposit becomes a $1,300 credit. The tests pin
+this: a 1300 KES settlement credits 10 USD, and a settlement in the wrong
+currency is refused.
+
+## Exchange rate
+
+`GET /api/auth/exchange-rate` is **public**, and that is deliberate: the mirrored
+client requests it with no `Authorization` header at all. Requiring auth produced
+`401`, the client silently kept its hardcoded `130`, and the modal displayed a
+fabricated conversion. A reference rate is not user data.
+
+The rate comes from a cached live feed, and the response names its source and
+update time. If the provider cannot be reached the endpoint returns
+`503 EXCHANGE_RATE_UNAVAILABLE` (or the last known rate, flagged `stale`) — it
+never invents one. A KES charge cannot be issued while the rate is unavailable,
+so M-Pesa deposits are blocked rather than converted at a guess.
+
+## Client-side fixes
+
+The mirrored bundle is third-party compiled output. Two defects in it break the
+deposit modal, and both are fixed at serve time in
+[tools/client-patches.mjs](tools/client-patches.mjs) so `site/` stays a faithful
+copy and `npm run mirror` stays re-runnable.
+
+1. **TRC20 request storm.** Each address effect had its own loading flag in its
+   dependency array:
+
+   ```js
+   "trc20" !== method || address || loading || (async () => {
+     setLoading(true);
+     try { /* fetch */ } finally { setLoading(false); }
+   })();   // deps: [method, address, loading]
+   ```
+
+   The flag is both the guard and a dependency. When the request yields no
+   address, `loading` flipping true → false re-triggers the effect — forever.
+   Measured: **50+ requests in 12 seconds** from one modal open (the network log
+   was capped), about 4/second and unbounded. Fixed by dropping the loading flag
+   from the dependency array, which brings it to **1 request per open**.
+
+2. **The rate fallback was invisible.** `if (e.ok) { setRate(...) }` with no
+   `else`, inside a `try/catch`, and the rate state initialised to a hardcoded
+   `130`. A non-OK response took no branch at all, so the modal kept rendering an
+   estimate with no indication it was stale. Fixed by adding the missing `else`,
+   which reports through the modal's existing error banner.
+
+3. **Address errors were generic.** A failed address lookup discarded the
+   response body, so a configuration error read like a network blip. Now the
+   API's own message is shown.
+
+Every edit is anchored on an exact string and self-validating: if the upstream
+bundle changes and an anchor stops matching, the edit is skipped and logged
+rather than guessed at. Set `PATCH_CLIENT=0` to serve the bundle untouched.
+
+### Remaining gap
+
+The TRC20 panel still shows *"Generating your dedicated deposit address…"*
+alongside the error banner. That spinner is keyed on the address being absent
+(`loading || !address`), not on the request having failed, so removing it means
+introducing an explicit unavailable state into the component's render — a change
+to minified third-party UI code that was not made blind. The user is never told
+anything false: the banner states why the address is unavailable.
+
+A third TRC20 panel variant (in `219b97e8e5e970d5.js`) has no error state at all
+to write to — the nearest banner belongs to a component 75 kB away — so it is
+left alone and reported here rather than patched speculatively.
+
+## Tests
+
+```bash
+npm test
+```
+
+40 tests. They cover the 15 required behaviours: unauthenticated access, invalid
+amounts and phone numbers, missing credentials, provider rejection and timeout,
+pending status, genuine settlement from a fixture, duplicate replay, ten
+concurrent settlements of one reference, failed/cancelled deposits, duplicate
+address requests, a missing exchange-rate provider, malformed provider
+responses, cross-user access, crediting an unverified deposit, and database
+rollback.
+
+The provider fixtures are **fixtures**. No test contacts Safaricom, a card
+processor or a TRON custodian, and no test result here should be read as
+evidence that a real payment works.

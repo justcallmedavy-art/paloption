@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.data/
+.DS_Store
+*.log
+
+# Provider credentials — never committed. See PAYMENTS.md.
+.env.local
+
+# Locally downloaded binaries (the callback tunnel).
+.tools/
+
+# Build output. Both snapshots are generated — tools/prepare-deploy.mjs writes
+# the Vercel one and tools/prepare-api.mjs the API one — so committing them
+# would only ship stale copies, plus the CLI's local project link.
+deploy/
+
+# This workspace's own agent state.
+.freebuff/

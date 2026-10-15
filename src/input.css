@@ -1,0 +1,92 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ------------------------------------------------------------------ *
+ * Design tokens
+ * The landing page keeps its own `theme-*` hooks; the app pages use the
+ * semantic tokens below so dark/light only has to be defined once.
+ * ------------------------------------------------------------------ */
+:root,
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --brand: #ff4d2e;
+  --brand-2: #2563eb;
+  --page: #101520;
+  --card: #1a2130;
+  --panel: #161d2b;
+  --deep: #0d111a;
+  --field: rgba(255, 255, 255, 0.04);
+  --line: rgba(255, 255, 255, 0.07);
+  --text-primary: #ffffff;
+  --text-muted: #9ca3af;
+  --text-subtle: #6b7280;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --page: #f8fafc;
+  --card: #ffffff;
+  --panel: #ffffff;
+  --deep: #f1f5f9;
+  --field: #ffffff;
+  --line: #e5e7eb;
+  --text-primary: #111827;
+  --text-muted: #4b5563;
+  --text-subtle: #9ca3af;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@layer components {
+  .bg-page { background-color: var(--page); }
+  .bg-card { background-color: var(--card); }
+  .bg-panel { background-color: var(--panel); }
+  .bg-deep { background-color: var(--deep); }
+  .bg-field { background-color: var(--field); }
+  .border-line { border-color: var(--line); }
+  .text-primary { color: var(--text-primary); }
+  .text-muted { color: var(--text-muted); }
+  .text-subtle { color: var(--text-subtle); }
+}
+
+/* Landing-page light overrides (its markup predates the tokens above). */
+html[data-theme="light"] body {
+  background: #f5f7fa;
+}
+
+html[data-theme="light"] .theme-surface {
+  background-color: #f5f7fa !important;
+  color: #141922;
+}
+
+html[data-theme="light"] .theme-nav {
+  background-color: rgba(245,247,250, 0.85) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+html[data-theme="light"] .theme-card {
+  background-color: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+html[data-theme="light"] .theme-text {
+  color: #141922 !important;
+}
+
+html[data-theme="light"] .theme-muted {
+  color: #4b5563 !important;
+}
+
+html[data-theme="light"] .theme-ticker {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* gray-300 is too faint on the light surface; keep it legible */
+html[data-theme="light"] .theme-surface .text-gray-300 {
+  color: #4b5563 !important;
+}

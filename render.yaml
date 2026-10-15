@@ -1,0 +1,103 @@
+# Render Blueprint — the API service and its Postgres database, together.
+#
+#   Dashboard -> New -> Blueprint -> connect this repository.
+#
+# Render reads this file and provisions both resources. The values it cannot
+# know are left as `sync: false`, which means "ask me in the dashboard":
+#
+#   ALLOWED_ORIGINS         a frontend origin other than this service, e.g.
+#                           https://paloption.vercel.app (no trailing slash)
+#   DARAJA_* credentials    your Daraja app's consumer key/secret/passkey
+#   DARAJA_CALLBACK_URL     filled in after the first deploy — the URL contains
+#                           this service's own host, which does not exist yet.
+#                           See DEPLOY.md §4 for the order of operations.
+#
+# DATABASE_URL is wired from the database below, so the service never sees an
+# in-memory ledger: NODE_ENV=production makes an absent DATABASE_URL a boot error.
+#
+# NOTE: Render's free Postgres plan expires; `basic-256mb` is the smallest paid
+# one and is what a deployment that must stay up should use.
+services:
+  - type: web
+    name: paloption-api
+    runtime: node
+    plan: starter
+    region: oregon
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: paloption-db
+          property: connectionString
+      # The frontend's origin. Without it the browser's requests are refused
+      # with ORIGIN_NOT_ALLOWED.
+      - key: ALLOWED_ORIGINS
+        sync: false
+      # Kept out of the client: the callback path carries this token, and it is
+      # the only thing protecting a public route Daraja must reach.
+      - key: DARAJA_CALLBACK_TOKEN
+        generateValue: true
+
+      # ---------------------------------------------------------------------
+      # M-PESA, PHASE 1 — SANDBOX. Nothing here can move real money.
+      #
+      # Sandbox is a paybill: 174379 is a lipa na m-pesa *paybill* shortcode, and
+      # the sandbox does not accept a Buy Goods request against it. So the two
+      # switches below start on their paybill values, and `DARAJA_ENV=sandbox`
+      # means production credentials are not consulted at all.
+      # ---------------------------------------------------------------------
+      - key: DARAJA_ENV
+        value: sandbox
+      - key: DARAJA_TRANSACTION_TYPE
+        value: paybill
+      - key: DARAJA_PARTY_B
+        sync: false
+
+      # ---------------------------------------------------------------------
+      # M-PESA, PHASE 2 — GOING LIVE ON A TILL NUMBER. Read this first.
+      #
+      # A TILL IS NOT A PAYBILL. Buy Goods and PayBill take the same request with
+      # exactly one field changed — `CustomerBuyGoodsOnline` versus
+      # `CustomerPayBillOnline` — and getting it wrong produces a request
+      # Safaricom accepts and your merchant never sees. So these move TOGETHER:
+      #
+      #   DARAJA_ENV               sandbox    -> production
+      #   DARAJA_ALLOW_PRODUCTION  unset      -> 1
+      #   DARAJA_TRANSACTION_TYPE  paybill    -> buygoods
+      #   DARAJA_SHORTCODE         174379     -> your till number
+      #   DARAJA_PARTY_B           (blank)    -> only if the till differs from
+      #                                          the business shortcode
+      #
+      # With production enabled this instance charges a REAL shortcode: anyone
+      # who reaches the frontend is sent a real STK prompt, approves it with
+      # their real M-Pesa PIN, and pays real money into the operator wallet.
+      # Checkout shows the shortcode's registered name on the customer's handset,
+      # and this is a clone, not the platform that name belongs to.
+      #
+      # DARAJA_ALLOW_PRODUCTION is a deliberate second lock: production Daraja is
+      # ignored without it, so a copied configuration cannot start taking real
+      # payments on its own. The boot log prints `WARNING : Daraja is LIVE` once
+      # it is active, so a dashboard shows which instance is taking payments.
+      # ---------------------------------------------------------------------
+      - key: DARAJA_ALLOW_PRODUCTION
+        sync: false
+      - key: DARAJA_CALLBACK_URL
+        sync: false
+      - key: DARAJA_CONSUMER_KEY
+        sync: false
+      - key: DARAJA_CONSUMER_SECRET
+        sync: false
+      - key: DARAJA_SHORTCODE
+        sync: false
+      - key: DARAJA_PASSKEY
+        sync: false
+
+databases:
+  - name: paloption-db
+    plan: basic-256mb
+    postgresMajorVersion: "16"

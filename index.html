@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="./dist/styles.css" />
+    <link rel="manifest" href="./manifest.json" />
+    <meta name="theme-color" content="#FF4D2E" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <title>PalOption - Binary Trading Platform</title>
+    <meta name="description" content="Trade binary options on synthetic indices" />
+    <meta name="application-name" content="PalOption" />
+    <meta property="og:title" content="PalOption - Binary Trading Platform" />
+    <meta property="og:description" content="Trade binary options on synthetic indices" />
+    <meta property="og:url" content="https://paloption.com" />
+    <meta property="og:site_name" content="PalOption" />
+    <meta property="og:image" content="./icon.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="PalOption - Binary Trading Platform" />
+    <meta name="twitter:description" content="Trade binary options on synthetic indices" />
+    <meta name="twitter:image" content="./icon.png" />
+    <link rel="icon" href="./favicon.ico" sizes="32x32" type="image/x-icon" />
+    <link rel="icon" href="./icon.png" sizes="512x512" type="image/png" />
+  </head>
+  <body class="antialiased font-sans theme-surface bg-[#101520] text-white min-h-screen overflow-x-hidden transition-colors duration-300">
+    <!-- ================= NAV ================= -->
+    <nav class="theme-nav sticky top-0 z-50 backdrop-blur-xl bg-[#101520]/85 border-b border-white/[0.07]">
+      <div class="max-w-6xl mx-auto flex items-center justify-between px-5 h-14">
+        <a class="flex items-center gap-2.5" href="#top">
+          <div style="background: linear-gradient(135deg, #ff4d2e, #2563eb)" class="w-8 h-8 rounded-lg flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-[17px] h-[17px] text-white">
+              <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+              <polyline points="16 7 22 7 22 13" />
+            </svg>
+          </div>
+          <span class="text-[17px] font-bold text-white theme-text">PalOption</span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-1">
+          <a class="px-3 py-1.5 text-[13px] font-medium rounded-md transition text-gray-400 hover:text-white hover:bg-white/5" href="#features">Features</a>
+          <a class="px-3 py-1.5 text-[13px] font-medium rounded-md transition text-gray-400 hover:text-white hover:bg-white/5" href="#steps">How It Works</a>
+          <a class="px-3 py-1.5 text-[13px] font-medium rounded-md transition text-gray-400 hover:text-white hover:bg-white/5" href="#reviews">Reviews</a>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="theme-toggle" aria-label="Toggle theme" class="p-2 rounded-lg transition hover:bg-white/5 text-gray-400">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2" />
+              <path d="M12 20v2" />
+              <path d="m4.93 4.93 1.41 1.41" />
+              <path d="m17.66 17.66 1.41 1.41" />
+              <path d="M2 12h2" />
+              <path d="M20 12h2" />
+              <path d="m6.34 17.66-1.41 1.41" />
+              <path d="m19.07 4.93-1.41 1.41" />
+            </svg>
+          </button>
+          <a class="px-3.5 py-1.5 text-[13px] font-medium rounded-md transition text-gray-300 hover:text-white" href="#">Log in</a>
+          <a class="px-4 py-2 text-[13px] font-semibold text-white rounded-lg transition shadow-lg shadow-[#FF4D2E]/25 hover:shadow-[#FF4D2E]/40" style="background: #ff4d2e" href="#">Get Started</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- ================= HERO ================= -->
+    <section id="top" class="relative overflow-hidden">
+      <div class="absolute inset-0 pointer-events-none">
+        <div style="background: radial-gradient(circle, rgba(255,77,46, 0.12) 0%, transparent 70%)" class="absolute top-[-200px] left-1/2 -translate-x-1/2 w-[700px] h-[700px] rounded-full"></div>
+        <div style="background: radial-gradient(circle, rgba(37,99,235, 0.08) 0%, transparent 70%)" class="absolute top-[100px] right-[-100px] w-[400px] h-[400px] rounded-full"></div>
+      </div>
+      <div class="relative max-w-6xl mx-auto px-5 pt-16 md:pt-28 pb-12 md:pb-20 text-center">
+        <div style="color: #ff4d2e; border-color: rgba(255,77,46, 0.25); background: rgba(255,77,46, 0.08)" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold mb-7 border">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5">
+            <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+          </svg>
+          Trusted by 1M+ traders worldwide
+        </div>
+
+        <h1 class="text-4xl sm:text-5xl md:text-[3.75rem] lg:text-7xl font-extrabold leading-[1.05] tracking-tight mb-6 text-white theme-text">
+          Master the Markets,
+          <span style="background-image: linear-gradient(135deg, #ff4d2e, #2563eb)" class="bg-clip-text text-transparent">On Your Terms</span>
+        </h1>
+
+        <p class="text-[15px] md:text-lg leading-relaxed max-w-xl mx-auto mb-9 text-gray-400">Tap into 100+ global markets with instant execution and payouts up to 95%. Fund with M-Pesa and start from just $10.</p>
+
+        <div class="flex flex-col sm:flex-row gap-3 justify-center mb-12">
+          <a class="group inline-flex items-center justify-center gap-2 px-7 py-3.5 text-white font-semibold rounded-xl transition-all shadow-xl shadow-[#FF4D2E]/25 hover:shadow-[#FF4D2E]/40 text-[15px]" style="background: #ff4d2e" href="#">
+            Get Started — It's Free
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 group-hover:translate-x-0.5 transition-transform">
+              <path d="M5 12h14" />
+              <path d="m12 5 7 7-7 7" />
+            </svg>
+          </a>
+          <button class="inline-flex items-center justify-center gap-2 px-7 py-3.5 font-semibold rounded-xl text-[15px] border transition border-white/10 hover:bg-white/5 text-white theme-text">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4">
+              <polygon points="6 3 20 12 6 21 6 3" />
+            </svg>
+            Try Demo
+          </button>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-3 md:gap-4">
+          <div class="inline-flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-medium bg-white/[0.04] text-gray-300 border border-white/[0.06]">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5" style="color: #ff4d2e">
+              <line x1="10" x2="14" y1="2" y2="2" />
+              <line x1="12" x2="15" y1="14" y2="11" />
+              <circle cx="12" cy="14" r="8" />
+            </svg>
+            &lt;1s execution
+          </div>
+          <div class="inline-flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-medium bg-white/[0.04] text-gray-300 border border-white/[0.06]">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5" style="color: #ff4d2e">
+              <path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z" />
+              <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
+              <path d="M12 18V6" />
+            </svg>
+            Up to 95% payout
+          </div>
+          <div class="inline-flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-medium bg-white/[0.04] text-gray-300 border border-white/[0.06]">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5" style="color: #ff4d2e">
+              <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+              <path d="m9 12 2 2 4-4" />
+            </svg>
+            Bank-level security
+          </div>
+          <div class="inline-flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-medium bg-white/[0.04] text-gray-300 border border-white/[0.06]">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5" style="color: #ff4d2e">
+              <rect width="20" height="12" x="2" y="6" rx="2" />
+              <circle cx="12" cy="12" r="2" />
+              <path d="M6 12h.01M18 12h.01" />
+            </svg>
+            Zero fees
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= PRICE TICKER ================= -->
+    <div class="border-y border-white/[0.07]">
+      <div class="theme-ticker overflow-hidden bg-[#151B28]/60 backdrop-blur-sm">
+        <div class="flex animate-marquee w-max py-3" id="ticker">
+          <!-- track A -->
+          <div class="flex items-center gap-2.5 px-5"><div class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white" style="background: #f7931a">B</div><span class="text-xs font-semibold text-gray-300">BTC</span><span class="text-xs text-gray-500">$43,256</span><span class="text-[11px] font-bold text-emerald-500">+2.34%</span><div class="w-px h-4 bg-white/[0.06]"></div></div>
+          <div class="flex items-center gap-2.5 px-5"><div class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white" style="background: #627eea">E</div><span class="text-xs font-semibold text-gray-300">ETH</span><span class="text-xs text-gray-500">$2,284</span><span class="text-[11px] font-bold text-emerald-500">+1.87%</span><div class="w-px h-4 bg-white/[0.06]"></div></div>
+          <div class="flex items-center gap-2.5 px-5"><div class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white" style="background: #555">A</div><span class="text-xs font-semibold text-gray-300">AAPL</span><span class="text-xs text-gray-500">$178.32</span><span class="text-[11px] font-bold text-rose-500">-0.45%</span><div class="w-px h-4 bg-white/[0.06]"></div></div>
+          <div class="flex items-center gap-2.5 px-5"><div class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white" style="background: #d4a017">X</div><span class="text-xs font-semibold text-gray-300">XAU</span><span class="text-xs text-gray-500">$2,024</span><span class="text-[11px] font-bold text-emerald-500">+0.89%</span><div class="w-px h-4 bg-white/[0.06]"></div></div>
+          <div class="flex items-center gap-2.5 px-5"><div class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white" style="background: #e31937">T</div><span class="text-xs font-semibold text-gray-300">TSLA</span><span class="text-xs text-gray-500">$248.90</span><span class="text-[11px] font-bold text-emerald-500">+3.21%</span><div class="w-px h-4 bg-white/[0.06]"></div></div>
+          <div class="flex items-center gap-2.5 px-5"><div class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white" style="background: #0052b4">E</div><span class="text-xs font-semibold text-gray-300">EUR</span><span class="text-xs text-gray-500">$1.0892</span><span class="text-[11px] font-bold text-emerald-500">+0.12%</span><div class="w-px h-4 bg-white/[0.06]"></div></div>
+          <div class="flex items-center gap-2.5 px-5"><div class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white" style="background: #9945ff">S</div><span class="text-xs font-semibold text-gray-300">SOL</span><span class="text-xs text-gray-500">$98.42</span><span class="text-[11px] font-bold text-emerald-500">+5.67%</span><div class="w-px h-4 bg-white/[0.06]"></div></div>
+          <div class="flex items-center gap-2.5 px-5"><div class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white" style="background: #c8102e">G</div><span class="text-xs font-semibold text-gray-300">GBP</span><span class="text-xs text-gray-500">$1.2654</span><span class="text-[11px] font-bold text-rose-500">-0.08%</span><div class="w-px h-4 bg-white/[0.06]"></div></div>
+          <!-- track B (duplicate for seamless loop) -->
+          <div class="flex items-center gap-2.5 px-5"><div class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white" style="background: #f7931a">B</div><span class="text-xs font-semibold text-gray-300">BTC</span><span class="text-xs text-gray-500">$43,256</span><span class="text-[11px] font-bold text-emerald-500">+2.34%</span><div class="w-px h-4 bg-white/[0.06]"></div></div>
+          <div class="flex items-center gap-2.5 px-5"><div class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white" style="background: #627eea">E</div><span class="text-xs font-semibold text-gray-300">ETH</span><span class="text-xs text-gray-500">$2,284</span><span class="text-[11px] font-bold text-emerald-500">+1.87%</span><div class="w-px h-4 bg-white/[0.06]"></div></div>
+          <div class="flex items-center gap-2.5 px-5"><div class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white" style="background: #555">A</div><span class="text-xs font-semibold text-gray-300">AAPL</span><span class="text-xs text-gray-500">$178.32</span><span class="text-[11px] font-bold text-rose-500">-0.45%</span><div class="w-px h-4 bg-white/[0.06]"></div></div>
+          <div class="flex items-center gap-2.5 px-5"><div class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white" style="background: #d4a017">X</div><span class="text-xs font-semibold text-gray-300">XAU</span><span class="text-xs text-gray-500">$2,024</span><span class="text-[11px] font-bold text-emerald-500">+0.89%</span><div class="w-px h-4 bg-white/[0.06]"></div></div>
+          <div class="flex items-center gap-2.5 px-5"><div class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white" style="background: #e31937">T</div><span class="text-xs font-semibold text-gray-300">TSLA</span><span class="text-xs text-gray-500">$248.90</span><span class="text-[11px] font-bold text-emerald-500">+3.21%</span><div class="w-px h-4 bg-white/[0.06]"></div></div>
+          <div class="flex items-center gap-2.5 px-5"><div class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white" style="background: #0052b4">E</div><span class="text-xs font-semibold text-gray-300">EUR</span><span class="text-xs text-gray-500">$1.0892</span><span class="text-[11px] font-bold text-emerald-500">+0.12%</span><div class="w-px h-4 bg-white/[0.06]"></div></div>
+          <div class="flex items-center gap-2.5 px-5"><div class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white" style="background: #9945ff">S</div><span class="text-xs font-semibold text-gray-300">SOL</span><span class="text-xs text-gray-500">$98.42</span><span class="text-[11px] font-bold text-emerald-500">+5.67%</span><div class="w-px h-4 bg-white/[0.06]"></div></div>
+          <div class="flex items-center gap-2.5 px-5"><div class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white" style="background: #c8102e">G</div><span class="text-xs font-semibold text-gray-300">GBP</span><span class="text-xs text-gray-500">$1.2654</span><span class="text-[11px] font-bold text-rose-500">-0.08%</span><div class="w-px h-4 bg-white/[0.06]"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= LIVE TRADING PREVIEW ================= -->
+    <section class="px-0 md:px-5 pt-0 pb-16 md:py-24 max-w-6xl md:mx-auto">
+      <div class="w-full relative">
+        <div class="hidden md:block absolute -inset-6 rounded-[2rem] blur-[50px] opacity-25" style="background: linear-gradient(135deg, #ff4d2e, #2563eb)"></div>
+        <div class="theme-card relative rounded-none md:rounded-2xl overflow-hidden border-y md:border border-white/[0.07] bg-[#1a2130] shadow-2xl shadow-black/30">
+          <div class="flex items-center justify-between px-4 md:px-5 py-2.5 border-b border-white/[0.07]">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg bg-[#f7931a]/15 flex items-center justify-center">
+                <span class="text-sm font-bold text-[#f7931a]">B</span>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-bold text-white theme-text">BTC/USD</span>
+                  <div class="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/10 rounded">
+                    <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                    <span class="text-[9px] font-bold text-emerald-500">LIVE</span>
+                  </div>
+                </div>
+                <span class="text-[10px] text-gray-500">Bitcoin / US Dollar</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <div id="live-price" class="text-lg md:text-xl font-bold tabular-nums transition-colors duration-300 text-emerald-500">$43,256.78</div>
+              <div id="live-change" class="text-[11px] font-bold text-emerald-500">+0.00%</div>
+            </div>
+          </div>
+
+          <div class="flex flex-col md:flex-row">
+            <div class="flex-1 relative">
+              <div class="h-48 sm:h-56 mx-0 my-0 md:m-4 rounded-none md:rounded-xl overflow-hidden relative bg-[#0d111a]">
+                <div class="absolute inset-0 flex flex-col justify-between py-3 pointer-events-none">
+                  <div class="w-full border-t border-white/[0.03]"></div>
+                  <div class="w-full border-t border-white/[0.03]"></div>
+                  <div class="w-full border-t border-white/[0.03]"></div>
+                  <div class="w-full border-t border-white/[0.03]"></div>
+                  <div class="w-full border-t border-white/[0.03]"></div>
+                </div>
+                <svg id="live-chart" class="w-full h-full relative z-10" viewBox="0 0 500 160" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="liveGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop id="liveGradTop" offset="0%" stop-color="#22c55e" stop-opacity="0.15" />
+                      <stop id="liveGradBottom" offset="100%" stop-color="#22c55e" stop-opacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <path id="live-area" d="M0,80 L500,80 L500,160 L0,160 Z" fill="url(#liveGrad)" />
+                  <path id="live-line" d="M0,80 L500,80" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                  <circle id="live-dot" cx="500" cy="80" r="4" fill="#22c55e" />
+                  <circle id="live-pulse" cx="500" cy="80" r="8" fill="#22c55e" opacity="0.2">
+                    <animate attributeName="r" values="8;16;8" dur="2s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" values="0.2;0;0.2" dur="2s" repeatCount="indefinite" />
+                  </circle>
+                  <line x1="0" y1="80" x2="488" y2="80" stroke="#22c55e" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.4" />
+                </svg>
+                <div id="live-badge" class="absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-bold tabular-nums bg-black/40 backdrop-blur" style="color: #22c55e">$43256.78</div>
+              </div>
+            </div>
+
+            <div class="w-full md:w-52 flex-shrink-0 border-t md:border-t-0 md:border-l border-white/[0.07]">
+              <div class="px-4 py-2.5 border-b border-white/[0.07] flex items-center justify-between">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-gray-500">Live Trades</span>
+                <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+              </div>
+              <div id="live-trades" class="divide-y" style="border-color: rgba(255, 255, 255, 0.04)"></div>
+              <div class="p-3 border-t border-white/[0.07]">
+                <button class="w-full py-2.5 rounded-xl text-white font-semibold text-sm transition-all" style="background: #ff4d2e; box-shadow: 0 4px 16px #ff4d2e33">Start Trading</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= FEATURES ================= -->
+    <section id="features" class="border-y border-white/[0.07] bg-[#161d2b]">
+      <div class="max-w-6xl mx-auto px-5 py-16 md:py-24">
+        <div class="text-center mb-14">
+          <p style="color: #ff4d2e" class="text-xs font-bold uppercase tracking-widest mb-3">Why PalOption</p>
+          <h2 class="text-3xl md:text-[2.75rem] font-bold text-white theme-text">Everything you need to trade with confidence</h2>
+        </div>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div class="theme-card rounded-2xl p-6 border border-white/[0.07] bg-[#1a2130] hover:bg-[#212A3A] transition-all group">
+            <div style="background: #f59e0b12" class="w-10 h-10 rounded-xl flex items-center justify-center mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5" style="color: #f59e0b">
+                <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
+              </svg>
+            </div>
+            <h3 class="font-semibold mb-1.5 text-white theme-text">Instant Execution</h3>
+            <p class="text-sm leading-relaxed text-gray-400">Orders fill in under a second — no lag, no requotes, no missed moments.</p>
+          </div>
+
+          <div class="theme-card rounded-2xl p-6 border border-white/[0.07] bg-[#1a2130] hover:bg-[#212A3A] transition-all group">
+            <div style="background: #22c55e12" class="w-10 h-10 rounded-xl flex items-center justify-center mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5" style="color: #22c55e">
+                <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+                <path d="m9 12 2 2 4-4" />
+              </svg>
+            </div>
+            <h3 class="font-semibold mb-1.5 text-white theme-text">Safe &amp; Secure</h3>
+            <p class="text-sm leading-relaxed text-gray-400">Bank-grade encryption and segregated accounts keep your funds protected.</p>
+          </div>
+
+          <div class="theme-card rounded-2xl p-6 border border-white/[0.07] bg-[#1a2130] hover:bg-[#212A3A] transition-all group">
+            <div style="background: #ff4d2e12" class="w-10 h-10 rounded-xl flex items-center justify-center mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5" style="color: #ff4d2e">
+                <path d="M21.54 15H17a2 2 0 0 0-2 2v4.54" />
+                <path d="M7 3.34V5a3 3 0 0 0 3 3a2 2 0 0 1 2 2c0 1.1.9 2 2 2a2 2 0 0 0 2-2c0-1.1.9-2 2-2h3.17" />
+                <path d="M11 21.95V18a2 2 0 0 0-2-2a2 2 0 0 1-2-2v-1a2 2 0 0 0-2-2H2.05" />
+                <circle cx="12" cy="12" r="10" />
+              </svg>
+            </div>
+            <h3 class="font-semibold mb-1.5 text-white theme-text">100+ Markets</h3>
+            <p class="text-sm leading-relaxed text-gray-400">Forex, crypto, stocks, indices and commodities — all under one roof.</p>
+          </div>
+
+          <div class="theme-card rounded-2xl p-6 border border-white/[0.07] bg-[#1a2130] hover:bg-[#212A3A] transition-all group">
+            <div style="background: #ef444412" class="w-10 h-10 rounded-xl flex items-center justify-center mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5" style="color: #ef4444">
+                <path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z" />
+                <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
+                <path d="M12 18V6" />
+              </svg>
+            </div>
+            <h3 class="font-semibold mb-1.5 text-white theme-text">Zero Hidden Fees</h3>
+            <p class="text-sm leading-relaxed text-gray-400">No charges on deposits or withdrawals. What you see is what you keep.</p>
+          </div>
+
+          <div class="theme-card rounded-2xl p-6 border border-white/[0.07] bg-[#1a2130] hover:bg-[#212A3A] transition-all group">
+            <div style="background: #06b6d412" class="w-10 h-10 rounded-xl flex items-center justify-center mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5" style="color: #06b6d4">
+                <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
+                <path d="M12 18h.01" />
+              </svg>
+            </div>
+            <h3 class="font-semibold mb-1.5 text-white theme-text">Built for Mobile</h3>
+            <p class="text-sm leading-relaxed text-gray-400">A fast, native-feeling app that fits any screen and any pocket.</p>
+          </div>
+
+          <div class="theme-card rounded-2xl p-6 border border-white/[0.07] bg-[#1a2130] hover:bg-[#212A3A] transition-all group">
+            <div style="background: #ff6b3d12" class="w-10 h-10 rounded-xl flex items-center justify-center mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5" style="color: #ff6b3d">
+                <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+              </svg>
+            </div>
+            <h3 class="font-semibold mb-1.5 text-white theme-text">Always-On Support</h3>
+            <p class="text-sm leading-relaxed text-gray-400">Real people, round the clock, on live chat and email whenever you need.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= STEPS ================= -->
+    <section id="steps" class="max-w-6xl mx-auto px-5 py-16 md:py-24">
+      <div class="text-center mb-14">
+        <p style="color: #ff4d2e" class="text-xs font-bold uppercase tracking-widest mb-3">Simple by design</p>
+        <h2 class="text-3xl md:text-[2.75rem] font-bold text-white theme-text">From sign-up to profit in 3 steps</h2>
+      </div>
+      <div class="relative grid md:grid-cols-3 gap-6">
+        <div class="hidden md:block absolute top-12 left-[16.66%] right-[16.66%] h-px bg-white/[0.06]"></div>
+
+        <div class="relative text-center">
+          <div style="background: linear-gradient(135deg, #ff4d2e, #2563eb); box-shadow: 0 4px 20px #ff4d2e33" class="relative z-10 w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold mx-auto mb-5 shadow-lg">1</div>
+          <div class="theme-card rounded-2xl p-6 pt-5 border border-white/[0.07] bg-[#1a2130]">
+            <div class="w-11 h-11 rounded-xl flex items-center justify-center mx-auto mb-4 bg-white/[0.04]">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5" style="color: #ff4d2e">
+                <path d="M14 4.1 12 6" />
+                <path d="m5.1 8-2.9-.8" />
+                <path d="m6 12-1.9 2" />
+                <path d="M7.2 2.2 8 5.1" />
+                <path d="M9.037 9.69a.498.498 0 0 1 .653-.653l11 4.5a.5.5 0 0 1-.074.949l-4.349 1.041a1 1 0 0 0-.74.739l-1.04 4.35a.5.5 0 0 1-.95.074z" />
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold mb-2 text-white theme-text">Create Account</h3>
+            <p class="text-sm leading-relaxed text-gray-400">Sign up free in under a minute — no paperwork to get going.</p>
+          </div>
+        </div>
+
+        <div class="relative text-center">
+          <div style="background: linear-gradient(135deg, #ff4d2e, #2563eb); box-shadow: 0 4px 20px #ff4d2e33" class="relative z-10 w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold mx-auto mb-5 shadow-lg">2</div>
+          <div class="theme-card rounded-2xl p-6 pt-5 border border-white/[0.07] bg-[#1a2130]">
+            <div class="w-11 h-11 rounded-xl flex items-center justify-center mx-auto mb-4 bg-white/[0.04]">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5" style="color: #ff4d2e">
+                <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" />
+                <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" />
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold mb-2 text-white theme-text">Add Funds</h3>
+            <p class="text-sm leading-relaxed text-gray-400">Top up instantly with M-Pesa, crypto or card, from as little as $10.</p>
+          </div>
+        </div>
+
+        <div class="relative text-center">
+          <div style="background: linear-gradient(135deg, #ff4d2e, #2563eb); box-shadow: 0 4px 20px #ff4d2e33" class="relative z-10 w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold mx-auto mb-5 shadow-lg">3</div>
+          <div class="theme-card rounded-2xl p-6 pt-5 border border-white/[0.07] bg-[#1a2130]">
+            <div class="w-11 h-11 rounded-xl flex items-center justify-center mx-auto mb-4 bg-white/[0.04]">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5" style="color: #ff4d2e">
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+                <path d="M4 22h16" />
+                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+                <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold mb-2 text-white theme-text">Trade &amp; Win</h3>
+            <p class="text-sm leading-relaxed text-gray-400">Pick an asset, call the direction, and cash in up to 95% profit.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= STATS ================= -->
+    <section style="background: linear-gradient(135deg, rgba(255,77,46, 0.06), rgba(37,99,235, 0.04))" class="border-y border-white/[0.07]">
+      <div class="max-w-6xl mx-auto px-5 py-14 md:py-20">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-8">
+          <div class="text-center">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mx-auto mb-3" style="color: #ff4d2e">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            <div class="text-3xl md:text-4xl font-extrabold mb-1 text-white theme-text">1M+</div>
+            <div class="text-sm text-gray-400">Active traders</div>
+          </div>
+          <div class="text-center">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mx-auto mb-3" style="color: #ff4d2e">
+              <path d="M3 3v16a2 2 0 0 0 2 2h16" />
+              <path d="M18 17V9" />
+              <path d="M13 17V5" />
+              <path d="M8 17v-3" />
+            </svg>
+            <div class="text-3xl md:text-4xl font-extrabold mb-1 text-white theme-text">$2B+</div>
+            <div class="text-sm text-gray-400">Total traded</div>
+          </div>
+          <div class="text-center">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mx-auto mb-3" style="color: #ff4d2e">
+              <path d="M21.54 15H17a2 2 0 0 0-2 2v4.54" />
+              <path d="M7 3.34V5a3 3 0 0 0 3 3a2 2 0 0 1 2 2c0 1.1.9 2 2 2a2 2 0 0 0 2-2c0-1.1.9-2 2-2h3.17" />
+              <path d="M11 21.95V18a2 2 0 0 0-2-2a2 2 0 0 1-2-2v-1a2 2 0 0 0-2-2H2.05" />
+              <circle cx="12" cy="12" r="10" />
+            </svg>
+            <div class="text-3xl md:text-4xl font-extrabold mb-1 text-white theme-text">150+</div>
+            <div class="text-sm text-gray-400">Countries</div>
+          </div>
+          <div class="text-center">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mx-auto mb-3" style="color: #ff4d2e">
+              <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+            </svg>
+            <div class="text-3xl md:text-4xl font-extrabold mb-1 text-white theme-text">4.9/5</div>
+            <div class="text-sm text-gray-400">User rating</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= REVIEWS ================= -->
+    <section id="reviews" class="max-w-6xl mx-auto px-5 py-16 md:py-24">
+      <div class="text-center mb-14">
+        <p style="color: #ff4d2e" class="text-xs font-bold uppercase tracking-widest mb-3">Trader stories</p>
+        <h2 class="text-3xl md:text-[2.75rem] font-bold text-white theme-text">Loved by traders everywhere</h2>
+      </div>
+      <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4" id="reviews-grid">
+        <div class="theme-card rounded-2xl p-5 border border-white/[0.07] bg-[#1a2130]">
+          <div class="flex gap-0.5 mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+          </div>
+          <p class="text-sm leading-relaxed mb-4 text-gray-400">&quot;M-Pesa deposits land instantly and payouts hit my phone in seconds. PalOption just works.&quot;</p>
+          <div class="flex items-center gap-2.5">
+            <div style="background: linear-gradient(135deg, #ff4d2e, #2563eb)" class="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold">BO</div>
+            <div><div class="text-sm font-semibold text-white theme-text">Brian O.</div><div class="text-[11px] text-gray-500">Nairobi</div></div>
+          </div>
+        </div>
+
+        <div class="theme-card rounded-2xl p-5 border border-white/[0.07] bg-[#1a2130]">
+          <div class="flex gap-0.5 mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+          </div>
+          <p class="text-sm leading-relaxed mb-4 text-gray-400">&quot;Clean, fast, no clutter. I place a trade in two taps and the charts never lag.&quot;</p>
+          <div class="flex items-center gap-2.5">
+            <div style="background: linear-gradient(135deg, #ff4d2e, #2563eb)" class="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold">PN</div>
+            <div><div class="text-sm font-semibold text-white theme-text">Priya N.</div><div class="text-[11px] text-gray-500">Dubai</div></div>
+          </div>
+        </div>
+
+        <div class="theme-card rounded-2xl p-5 border border-white/[0.07] bg-[#1a2130]">
+          <div class="flex gap-0.5 mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+          </div>
+          <p class="text-sm leading-relaxed mb-4 text-gray-400">&quot;Tried a dozen platforms over the years — this one finally feels built for real traders.&quot;</p>
+          <div class="flex items-center gap-2.5">
+            <div style="background: linear-gradient(135deg, #ff4d2e, #2563eb)" class="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold">ML</div>
+            <div><div class="text-sm font-semibold text-white theme-text">Marcus L.</div><div class="text-[11px] text-gray-500">Toronto</div></div>
+          </div>
+        </div>
+
+        <div class="theme-card rounded-2xl p-5 border border-white/[0.07] bg-[#1a2130]">
+          <div class="flex gap-0.5 mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+          </div>
+          <p class="text-sm leading-relaxed mb-4 text-gray-400">&quot;Started on the demo, moved to live in a week. Withdrawals have never let me down.&quot;</p>
+          <div class="flex items-center gap-2.5">
+            <div style="background: linear-gradient(135deg, #ff4d2e, #2563eb)" class="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold">AS</div>
+            <div><div class="text-sm font-semibold text-white theme-text">Amina S.</div><div class="text-[11px] text-gray-500">Lagos</div></div>
+          </div>
+        </div>
+
+        <div class="theme-card rounded-2xl p-5 border border-white/[0.07] bg-[#1a2130]">
+          <div class="flex gap-0.5 mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+          </div>
+          <p class="text-sm leading-relaxed mb-4 text-gray-400">&quot;Execution is genuinely instant. Perfect for the quick in-and-out trades I like.&quot;</p>
+          <div class="flex items-center gap-2.5">
+            <div style="background: linear-gradient(135deg, #ff4d2e, #2563eb)" class="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold">DR</div>
+            <div><div class="text-sm font-semibold text-white theme-text">Diego R.</div><div class="text-[11px] text-gray-500">Madrid</div></div>
+          </div>
+        </div>
+
+        <div class="theme-card rounded-2xl p-5 border border-white/[0.07] bg-[#1a2130]">
+          <div class="flex gap-0.5 mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>
+          </div>
+          <p class="text-sm leading-relaxed mb-4 text-gray-400">&quot;The mobile app is beautiful and dead simple. I trade on my commute every morning.&quot;</p>
+          <div class="flex items-center gap-2.5">
+            <div style="background: linear-gradient(135deg, #ff4d2e, #2563eb)" class="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold">GW</div>
+            <div><div class="text-sm font-semibold text-white theme-text">Grace W.</div><div class="text-[11px] text-gray-500">Mombasa</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CTA ================= -->
+    <section class="max-w-6xl mx-auto px-5 pb-16 md:pb-24">
+      <div style="background: linear-gradient(135deg, #ff4d2e, #1d4ed8)" class="relative rounded-3xl overflow-hidden px-6 py-14 md:py-20 text-center">
+        <div class="absolute inset-0 pointer-events-none overflow-hidden">
+          <div class="absolute -top-20 -right-20 w-80 h-80 rounded-full bg-white/5 blur-3xl"></div>
+          <div class="absolute -bottom-20 -left-20 w-60 h-60 rounded-full bg-[#2563EB]/15 blur-3xl"></div>
+        </div>
+        <div class="relative">
+          <h2 class="text-3xl md:text-5xl font-bold text-white mb-4">Your next trade starts here</h2>
+          <p class="text-white/70 text-[15px] md:text-lg max-w-md mx-auto mb-8">Join over a million traders on PalOption. Open your free account in under a minute.</p>
+          <div class="flex flex-col sm:flex-row gap-3 justify-center">
+            <a class="group inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-white text-[#ff4d2e] font-semibold rounded-xl transition-all shadow-xl text-[15px] hover:shadow-2xl" href="#">
+              Create Free Account
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 group-hover:translate-x-0.5 transition-transform">
+                <path d="M5 12h14" />
+                <path d="m12 5 7 7-7 7" />
+              </svg>
+            </a>
+            <button class="inline-flex items-center justify-center gap-2 px-8 py-3.5 font-semibold rounded-xl text-[15px] border border-white/25 text-white hover:bg-white/10 transition">Try Demo</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= MOBILE APP ================= -->
+    <section class="max-w-6xl mx-auto px-5 pb-16 md:pb-24">
+      <div style="background: linear-gradient(135deg, #7a2412 0%, #c93518 40%, #1d4ed8 100%)" class="relative rounded-3xl overflow-hidden">
+        <div class="absolute inset-0 pointer-events-none overflow-hidden">
+          <div class="absolute top-0 right-0 w-72 h-72 rounded-full bg-white/[0.06] blur-3xl translate-x-20 -translate-y-20"></div>
+          <div class="absolute bottom-0 left-0 w-56 h-56 rounded-full bg-[#06b6d4]/20 blur-3xl -translate-x-10 translate-y-10"></div>
+          <div class="absolute top-1/2 left-1/3 w-32 h-32 rounded-full bg-white/[0.04] blur-2xl"></div>
+        </div>
+        <div class="relative flex flex-col md:flex-row items-center gap-6 md:gap-12 px-6 py-10 md:px-12 md:py-14">
+          <div class="shrink-0 relative">
+            <div class="w-[72px] h-[140px] md:w-24 md:h-[180px] rounded-[18px] md:rounded-[22px] border-[3px] border-white/20 bg-gradient-to-b from-white/10 to-white/[0.03] backdrop-blur-sm flex flex-col items-center justify-center gap-2 shadow-2xl">
+              <div class="w-8 h-1 md:w-10 md:h-1.5 rounded-full bg-white/20 absolute top-2"></div>
+              <div class="w-8 h-8 md:w-11 md:h-11 rounded-xl bg-white/15 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 md:w-5 md:h-5 text-white">
+                  <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+                  <polyline points="16 7 22 7 22 13" />
+                </svg>
+              </div>
+              <span class="text-[8px] md:text-[10px] font-bold text-white/70">PalOption</span>
+            </div>
+            <div class="absolute -bottom-2 -right-2 w-7 h-7 md:w-9 md:h-9 rounded-full bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/30 border-2 border-white/20">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 md:w-4 md:h-4 text-white">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" x2="12" y1="15" y2="3" />
+              </svg>
+            </div>
+          </div>
+          <div class="flex-1 text-center md:text-left">
+            <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-white/80 text-[10px] md:text-xs font-semibold mb-3 backdrop-blur-sm border border-white/10">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
+                <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
+              </svg>
+              Android App Available
+            </div>
+            <h3 class="text-2xl md:text-3xl font-extrabold text-white mb-2 leading-tight">Your market, in your pocket</h3>
+            <p class="text-white/60 text-sm md:text-[15px] max-w-md mb-5 leading-relaxed">Get the PalOption app for a faster, smoother trading experience wherever you go.</p>
+            <div class="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">
+              <a href="#" class="group inline-flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-xl font-bold text-[15px] bg-white text-[#A52C12] shadow-xl shadow-black/15 hover:shadow-2xl active:scale-[0.97] transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" x2="12" y1="15" y2="3" />
+                </svg>
+                Download App
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 group-hover:translate-x-0.5 transition-transform">
+                  <path d="M5 12h14" />
+                  <path d="m12 5 7 7-7 7" />
+                </svg>
+              </a>
+              <div class="flex items-center gap-3 text-white/40 text-xs">
+                <span class="flex items-center gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5">
+                    <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+                    <path d="m9 12 2 2 4-4" />
+                  </svg>
+                  Secure
+                </span>
+                <span>·</span>
+                <span class="flex items-center gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5">
+                    <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
+                  </svg>
+                  Lightweight
+                </span>
+                <span>·</span>
+                <span class="flex items-center gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5">
+                    <path d="M10.268 21a2 2 0 0 0 3.464 0" />
+                    <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" />
+                  </svg>
+                  Push Alerts
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= FOOTER ================= -->
+    <footer class="border-t border-white/[0.07]">
+      <div class="max-w-6xl mx-auto px-5 py-8">
+        <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div class="flex items-center gap-2">
+            <div style="background: linear-gradient(135deg, #ff4d2e, #2563eb)" class="w-6 h-6 rounded-md flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 text-white">
+                <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+                <polyline points="16 7 22 7 22 13" />
+              </svg>
+            </div>
+            <span class="text-sm font-bold text-white theme-text">PalOption</span>
+          </div>
+          <div class="flex items-center gap-5 text-xs text-gray-500">
+            <a class="transition hover:text-white" href="#">Privacy</a>
+            <a class="transition hover:text-white" href="#">Terms</a>
+            <a class="transition hover:text-white" href="#">Support</a>
+          </div>
+          <div class="text-xs text-gray-500">© 2026 PalOption</div>
+        </div>
+      </div>
+    </footer>
+
+    <script src="./js/main.js" defer></script>
+  </body>
+</html>
