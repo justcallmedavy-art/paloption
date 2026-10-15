@@ -16,7 +16,7 @@ Two things live here:
 ```bash
 npm install
 npm run serve:mirror     # http://127.0.0.1:4174 — API, socket and client
-npm test                 # 102 tests, no database or provider needed
+npm test                 # 148 tests, no database or provider needed
 ```
 
 No `DATABASE_URL`? The ledger runs in memory, which is what the tests use and
@@ -27,6 +27,55 @@ cp .env.local.example .env.local      # provider credentials, DATABASE_URL
 npm run migrate                       # apply tools/schema.sql
 npm start                             # PORT=8080 NODE_ENV=production
 ```
+
+## Continuous integration
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs three suites on every
+push to `main` and every pull request. None of them needs a credential:
+
+| Suite | Command | Needs |
+| --- | --- | --- |
+| Regression | `npm test` | nothing — in-memory, every provider response is a fixture |
+| Settlement and reconciliation | `npm run test:postgres` | the job's disposable `postgres:16` service |
+| Contention and concurrency | `npm run test:postgres:stress` | the same service, at load |
+
+The database job starts a throwaway PostgreSQL, applies the real schema with
+`npm run migrate`, and only then runs the two database suites against
+`PG_TEST_DATABASE_URL`. `DATABASE_URL` is set for the migration step alone: the
+stress suite refuses to run when it points at the same database as the test URL,
+so the two can never be conflated by accident. No test contacts Safaricom, a
+card processor or a TRON custodian, and the suites clear provider credentials
+themselves — which is why CI behaves the same as a machine that has real keys.
+
+None of these jobs can pass without a database. The PostgreSQL suites have no
+in-memory fallback: without `PG_TEST_DATABASE_URL` they exit non-zero, and
+pointed at an unreachable server they fail with the connection error rather than
+skipping to a green tick.
+
+A missing suite file is caught too. `node --test` exits 0 when its glob matches
+nothing, so each test command runs `tools/check-suites.mjs` first and refuses if
+a suite is absent. Without that, a suite that was written but never committed
+would produce a green pipeline that ran none of it — CI only ever sees committed
+files.
+
+### Running the same three suites locally
+
+```bash
+npm test                        # no database needed
+
+node tools/pg-local.mjs url     # Windows: a disposable server, and its URL
+PG_TEST_DATABASE_URL="$(node tools/pg-local.mjs url)" npm run test:postgres
+PG_TEST_DATABASE_URL="$(node tools/pg-local.mjs url)" npm run test:postgres:stress
+```
+
+`tools/pg-local.mjs` installs the official PostgreSQL binaries for Windows and
+needs no administrator rights (see "A PostgreSQL for the suites" in
+[PAYMENTS.md](PAYMENTS.md)). It is Windows-only and says so; on Linux or macOS
+use a container instead —
+`docker run --rm -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16` — and
+point `PG_TEST_DATABASE_URL` at it. What each suite proves, and the knobs for the
+contention run (`PG_STRESS_*`), are documented in PAYMENTS.md with the rest of
+the payments work.
 
 ## Architecture, in one paragraph
 

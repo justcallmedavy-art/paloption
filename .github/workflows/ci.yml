@@ -1,0 +1,155 @@
+# Continuous integration.
+#
+# Two jobs, three suites, and one reason for all of it: the guarantees this
+# project makes about money are only worth what the last execution of them
+# proves. Every one of these commands runs identically on a laptop (see
+# PAYMENTS.md, "A PostgreSQL for the suites"), so a green run here means the
+# same thing a green run there does.
+#
+#   regression   npm test                     148 tests, no database needed
+#   postgres     npm run test:postgres         19 tests, real PostgreSQL
+#                npm run test:postgres:stress  13 tests, contention at load
+#
+# WHAT MUST NOT HAPPEN, and how it is prevented:
+#
+#   * A missing database must not turn into a pass. The PostgreSQL suites have no
+#     in-memory fallback: without PG_TEST_DATABASE_URL they refuse and exit
+#     non-zero, and with an unreachable URL they fail with the connection error.
+#     Nothing here is allowed to skip.
+#   * A missing test FILE must not turn into a pass either. `node --test <glob>`
+#     exits 0 when the glob matches nothing — measured, not guessed — and a CI
+#     checkout only ever holds committed files, so an uncommitted suite would
+#     otherwise give a green pipeline that ran none of it. Every test command in
+#     this workflow runs tools/check-suites.mjs first, which fails when a suite is
+#     absent instead of reporting victory over zero tests.
+#   * The test database must never be a production one. PG_TEST_DATABASE_URL is
+#     the only variable the suites read; DATABASE_URL is set for exactly one step
+#     (the migration) and points at the disposable service database. Giving the
+#     test steps a DATABASE_URL equal to PG_TEST_DATABASE_URL would make the
+#     stress suite refuse to run at all — that guard is deliberate, and this
+#     workflow relies on it rather than working around it.
+#   * No provider is ever contacted. Every Daraja, card and TRON response in
+#     these suites is a fixture, so there are no provider credentials in this
+#     file and none are needed. The suite's own env handling clears them on
+#     purpose, which is why CI behaves the same as a machine that has real keys.
+#   * A failing test fails the job: `run` steps fail on a non-zero exit, and no
+#     step uses `|| true` or `continue-on-error`.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# The jobs only read the repository.
+permissions:
+  contents: read
+
+# A newer push to the same ref supersedes a run that is still in flight.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    name: Regression suite (in-memory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          # Matches the Node the suites were last verified on. package.json
+          # declares >=20; only 24 has actually been exercised.
+          node-version: "24"
+
+      # The lockfile is committed, so install unlocks nothing and resolves
+      # nothing — the runner gets the same tree that was tested.
+      - name: Install (from the lockfile)
+        run: npm ci
+
+      - name: In-memory suites, including reconciliation
+        run: npm test
+
+  postgres:
+    name: PostgreSQL settlement, reconciliation and contention
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # A disposable PostgreSQL, destroyed with the runner. Nothing outside this
+    # job can reach it, and it holds nothing that outlives the run.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          # The name matters: the stress suite refuses to run against a database
+          # whose name does not look disposable, so this is deliberate.
+          POSTGRES_DB: paloption_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d paloption_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      # 127.0.0.1 is loopback, so the store infers no TLS, exactly as it does
+      # against a local server. The password is not a secret: this database has
+      # no data, no route to the internet, and no life beyond the job.
+      PG_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/paloption_test
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install (from the lockfile)
+        run: npm ci
+
+      # The service health check already gates on pg_isready, but a waiter that
+      # prints the server it reached turns "the database was not there" into a
+      # sentence rather than a hung job or a wall of connection stacks.
+      - name: Wait for PostgreSQL and name the server
+        run: |
+          node --input-type=module -e '
+            import pg from "pg";
+            const url = process.env.PG_TEST_DATABASE_URL;
+            for (let attempt = 1; attempt <= 30; attempt += 1) {
+              const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 2000 });
+              try {
+                await client.connect();
+                const { rows } = await client.query("select version()");
+                console.log("connected:", rows[0].version);
+                await client.end();
+                process.exit(0);
+              } catch (error) {
+                await client.end().catch(() => {});
+                console.log("attempt " + attempt + " failed: " + (error.code || error.message));
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+              }
+            }
+            console.error("PostgreSQL was never reachable at " + url);
+            process.exit(1);
+          '
+
+      # tools/migrate.mjs applies tools/schema.sql, which is also how a real
+      # deployment creates its tables. Running it here is what proves the
+      # migration itself works on a fresh server, not just the schema the tests
+      # apply into their own throwaway schema.
+      - name: Apply the schema to the test database
+        env:
+          # Scoped to this one step on purpose — see the note at the top.
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/paloption_test
+        run: npm run migrate
+
+      - name: Settlement and reconciliation against PostgreSQL
+        run: npm run test:postgres
+
+      - name: Contention and concurrency at load
+        run: npm run test:postgres:stress
