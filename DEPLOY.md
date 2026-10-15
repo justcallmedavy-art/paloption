@@ -16,7 +16,10 @@ boot (`api base : same-origin`). Go through §1, §2 and §4, then skip §3 and 
 §5 with `WEB` set to your API host.
 
 The split layout below is the alternative, and it costs you a CORS
-configuration plus a frontend rebuild whenever the API moves:
+configuration plus a frontend rebuild whenever the API moves. The Railway
+section in §2 is written for exactly that shape (client on Vercel, API on
+Railway), since a WebSocket and a one-second settlement timer cannot run on a
+serverless host:
 
 | Piece | Where | What runs |
 | --- | --- | --- |
@@ -103,14 +106,65 @@ Set these environment variables on the host:
    frontend on another host — the server's boot log says
    `api base : same-origin`, and the trading socket follows it.
 
-### Railway
+### Railway (the split deployment: client on Vercel, API here)
 
-`Procfile` and `railway.json` are already present:
+`Procfile` and `railway.json` are already in the repository, so nothing about
+*how* the service runs needs configuring:
 
-1. Railway → **New Project → Deploy from GitHub repo**.
-2. Add the **PostgreSQL** plugin; Railway injects `DATABASE_URL`.
-3. Set `NODE_ENV=production` and `ALLOWED_ORIGINS`.
-4. Railway uses `railway.json`'s start command and `/healthz` health check.
+| Setting | Value | Defined by |
+| --- | --- | --- |
+| builder | Nixpacks | `railway.json` |
+| build command | `npm ci --omit=dev` | `railway.json` |
+| start command | `node tools/server.mjs` | `railway.json`, and `Procfile` as the fallback |
+| health check | `/healthz` | `railway.json` |
+
+The server reads `PORT` (Railway sets it), binds `0.0.0.0`, and stops on
+`SIGTERM` — which is what a Railway redeploy sends. The trading tick, the
+socket and the database pool are all closed before it exits, and `/healthz`
+answers `503` if the database cannot be reached, so a host health-checking that
+path stops routing to an instance that could take a stake it cannot record.
+
+1. Railway → **New Project → Deploy from GitHub repo** → pick this repository.
+2. **Create → Database → PostgreSQL** in the same project.
+3. On the **service** (not the database), set the variables below. Reference the
+   database by name rather than copying its password:
+   `DATABASE_URL = ${{<database-service>.DATABASE_URL}}`.
+4. **Settings → Networking → Generate Domain.** That host is the API's origin.
+5. Set `ALLOWED_ORIGINS` to the frontend's origin *before* anyone signs in.
+6. Deploy the frontend against that host (§3), then verify (§5).
+
+#### Environment variables
+
+Required:
+
+| Variable | Value |
+| --- | --- |
+| `NODE_ENV` | `production` — with no `DATABASE_URL` this is a boot error, deliberately |
+| `DATABASE_URL` | `${{<database-service>.DATABASE_URL}}` |
+| `ALLOWED_ORIGINS` | `https://paloption.vercel.app` — the client is on another host here, so without it every request is `403 ORIGIN_NOT_ALLOWED` |
+
+Worth knowing:
+
+- **There is no session secret to set.** Sessions are 24 random bytes stored
+  server-side and each password is salted and hashed per user, so there is no
+  signing key to configure, rotate, or leak.
+- `PORT` is provided by Railway. `HOST` is unnecessary — the default already is
+  `0.0.0.0`.
+- TLS is inferred from the connection string: Railway's internal
+  `*.railway.internal` address is used as-is, while a public `*.proxy.rlwy.net`
+  address turns TLS on (`needsSsl` in `tools/store.mjs`). Use the internal one
+  for a service in the same project.
+
+Cashier variables, only when you want payments (§4, and PAYMENTS.md):
+`TRON_DEPOSIT_ADDRESS` — **money, and a wallet you control** — plus, for M-Pesa,
+`DARAJA_CONSUMER_KEY`, `DARAJA_CONSUMER_SECRET`, `DARAJA_SHORTCODE`,
+`DARAJA_PASSKEY`, `DARAJA_CALLBACK_TOKEN`, `DARAJA_CALLBACK_URL`,
+`DARAJA_ENV=sandbox`, `DARAJA_TRANSACTION_TYPE=paybill`, and
+`DARAJA_ALLOW_PRODUCTION=1` **only** when you mean to take real money. Card
+deposits need `CARD_PROVIDER` and `CARD_SECRET_KEY`.
+
+Leave them unset and the cashier answers `503 PAYMENT_PROVIDER_NOT_CONFIGURED`
+rather than pretending: no wallet is credited without a verified settlement.
 
 ### Fly / any container host
 
@@ -211,7 +265,23 @@ This is the setting that moves real money, so it reads plainly here:
 
 ## 5. Verify the deployment
 
-Run these against the deployed pair, not locally:
+One command runs the machine-checkable half of this section — the ledger is
+really Postgres, the client is served here, a same-origin request is accepted
+while a foreign origin is refused, an unknown `/api` path answers JSON rather
+than HTML, a refused login is a JSON error, and the socket takes this origin's
+handshake but not another's:
+
+```bash
+npm run verify:deploy -- --url https://<api-host>
+```
+
+It is read-only and exits non-zero if any check fails, so it can gate a release.
+Add `--register` to also create one throwaway account and prove registration and
+the session it returns work; that is the only variant that writes anything. The
+cashier is deliberately out of scope — it moves money, and its own tool is at the
+end of this section.
+
+The same checks by hand, against the deployed pair rather than locally:
 
 ```bash
 API=https://<api-host>
@@ -252,6 +322,7 @@ completed deposit. That last check is the one that catches a ledger and a
 deposit record disagreeing.
 
 `--sandbox` is mandatory and not a formality: the tool forges a *successful*
+
 callback, so it must never be pointed at an instance configured for production
 Daraja, where the callback token would be the only thing between a wallet and a
 free credit. It reads `DARAJA_CALLBACK_TOKEN` and never prints it.

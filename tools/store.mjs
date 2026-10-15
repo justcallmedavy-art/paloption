@@ -44,9 +44,16 @@ const num = (v) => (v == null ? null : Number(v));
 /**
  * Managed providers require TLS; a local Postgres usually refuses it. Inferring
  * this from the host keeps one connection string working in both places.
+ *
+ * Railway needs both answers, which is why the two hostnames are not one
+ * pattern: its internal address (`*.railway.internal`) is on the project's
+ * private network and does not offer TLS, while the public proxy it hands out
+ * for reaching the database from outside (`*.proxy.rlwy.net`, and the older
+ * `*.railway.app`) refuses a plaintext connection. Matching only the public ones
+ * is what lets a project use either without editing anything.
  */
 export const needsSsl = (connectionString) =>
-  /sslmode=require|neon\.tech|render\.com|amazonaws\.com|supabase\.|cockroachlabs\.cloud|timescale\.com/.test(
+  /sslmode=require|neon\.tech|render\.com|amazonaws\.com|supabase\.|cockroachlabs\.cloud|timescale\.com|rlwy\.net|railway\.app/.test(
     String(connectionString || "")
   );
 
@@ -474,6 +481,18 @@ export function createMemoryStore({ db = emptyDb() } = {}) {
     },
     async listMpesaCallbacks(limit = 100) {
       return state.mpesa_callbacks.slice(0, limit);
+    },
+
+    /**
+     * The ledger is in this process's arrays, so it is trivially reachable and
+     * there is nothing to release. These exist so the server can ask a health
+     * question and shut down without caring which store it was handed.
+     */
+    async ping() {
+      return true;
+    },
+    async close() {
+      return true;
     },
 
     /* exposed so a test can seed a row without going through a route */
@@ -905,6 +924,25 @@ export async function createPostgresStore({ connectionString, ssl, poolSize = 10
       async listMpesaCallbacks(limit = 100) {
         const { rows } = await q("SELECT * FROM mpesa_callbacks ORDER BY received_at DESC LIMIT $1", [limit]);
         return rows.map(callbackFromRow);
+      },
+
+      /**
+       * Reaches the database, so a health check can tell "the process is up"
+       * from "the ledger is up". A deployment whose pool has lost its server
+       * must not keep accepting trades it cannot record.
+       */
+      async ping() {
+        await q("SELECT 1");
+        return true;
+      },
+
+      /**
+       * Releases the pool on shutdown. The transaction-scoped handle shares the
+       * pool with its parent, so it must not end it.
+       */
+      async close() {
+        if (!inTransaction) await pool.end();
+        return true;
       },
     };
 

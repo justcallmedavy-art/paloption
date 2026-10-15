@@ -327,13 +327,13 @@ async function api(req, res, pathname) {
 
     case "GET /api/auth/me": {
       const user = await authorised(req);
-      if (!user) return sendJson(res, 401, { error: "Not authorised" });
+      if (!user) return sendJson(res, 401, { error: "Not authorised", code: "UNAUTHENTICATED" });
       return sendJson(res, 200, { user: publicUser(user) });
     }
 
     case "POST /api/auth/switch-account": {
       const user = await authorised(req);
-      if (!user) return sendJson(res, 401, { error: "Not authorised" });
+      if (!user) return sendJson(res, 401, { error: "Not authorised", code: "UNAUTHENTICATED" });
       const isDemo = body.mode !== "real";
       await store.updateUser(user.id, { is_demo: isDemo });
       user.is_demo = isDemo;
@@ -342,7 +342,7 @@ async function api(req, res, pathname) {
 
     case "POST /api/auth/reset-demo": {
       const user = await authorised(req);
-      if (!user) return sendJson(res, 401, { error: "Not authorised" });
+      if (!user) return sendJson(res, 401, { error: "Not authorised", code: "UNAUTHENTICATED" });
       await store.updateUser(user.id, { demo_balance: 10000, is_demo: true });
       user.demo_balance = 10000;
       user.is_demo = true;
@@ -351,21 +351,21 @@ async function api(req, res, pathname) {
 
     case "GET /api/trade/positions": {
       const user = await authorised(req);
-      if (!user) return sendJson(res, 401, { error: "Not authorised" });
+      if (!user) return sendJson(res, 401, { error: "Not authorised", code: "UNAUTHENTICATED" });
       const positions = await store.listPositionsByUser(user.id);
       return sendJson(res, 200, { positions });
     }
 
     case "GET /api/transactions": {
       const user = await authorised(req);
-      if (!user) return sendJson(res, 401, { error: "Not authorised" });
+      if (!user) return sendJson(res, 401, { error: "Not authorised", code: "UNAUTHENTICATED" });
       const transactions = await store.listTransactionsByUser(user.id);
       return sendJson(res, 200, { transactions });
     }
 
     case "GET /api/auto-trading/status": {
       const user = await authorised(req);
-      if (!user) return sendJson(res, 401, { error: "Not authorised" });
+      if (!user) return sendJson(res, 401, { error: "Not authorised", code: "UNAUTHENTICATED" });
       return sendJson(res, 200, { session: publicSession(botSessions.get(user.id)) ?? null });
     }
 
@@ -522,6 +522,17 @@ function wsFrame(payload) {
 
 function wsSend(socket, obj) {
   if (!socket.destroyed) socket.write(wsFrame(JSON.stringify(obj)));
+}
+
+/**
+ * A proper close frame, so a client is told this is a shutdown (1001) rather
+ * than being left to guess from a dropped connection. One byte of opcode and a
+ * two-byte status code — no payload, so no length gymnastics.
+ */
+function wsClose(socket, code = 1001, reason = "") {
+  if (socket.destroyed) return;
+  const text = Buffer.from(reason);
+  socket.write(Buffer.concat([Buffer.from([0x88, 2 + text.length]), Buffer.from([code >> 8, code & 0xff]), text]));
 }
 
 function wsParse(buffer) {
@@ -934,7 +945,9 @@ async function advanceBots(settled) {
   }
 }
 
-setInterval(async () => {
+// Held in a variable so a shutdown can stop the engine: an interval nobody can
+// clear keeps the process alive through a redeploy.
+const tickTimer = setInterval(async () => {
   for (const p of PRICES) {
     p.price = Math.max(0.01, p.price + (Math.random() - 0.5) * p.vol + (p.base - p.price) * 0.01);
     p.tick += 1;
@@ -1039,7 +1052,22 @@ const server = http.createServer(async (req, res) => {
     // than a bare 200, so a deploy that lost its database is visible from
     // outside instead of looking healthy until someone tries to trade.
     if (pathname === "/healthz") {
-      return sendJson(res, 200, { ok: true, storage: store.kind, uptime: Math.round(process.uptime()) });
+      // A process that is listening is not a service that can trade. The ledger
+      // is the only dependency, so ask it, and answer 503 when it cannot be
+      // reached — a host that health-checks this will then stop routing stakes
+      // to an instance that could accept money it cannot record. No secret is
+      // ever echoed here; the environment name is not one.
+      const ledger = await store.ping().then(
+        () => true,
+        () => false
+      );
+      return sendJson(res, ledger ? 200 : 503, {
+        ok: ledger,
+        storage: store.kind,
+        ledger: ledger ? "reachable" : "unreachable",
+        environment: process.env.NODE_ENV || "development",
+        uptime: Math.round(process.uptime()),
+      });
     }
     return await staticFile(req, res, pathname);
   } catch (err) {
@@ -1183,6 +1211,10 @@ server.listen(PORT, HOST, () => {
   // which is what lets tests (and parallel runs) avoid fixed-port collisions.
   const { port } = server.address();
   console.log(`PalOption mirror + local API on http://127.0.0.1:${port}`);
+  // The line above is the convenient local address; this is the one that says
+  // whether a host can actually reach the process.
+  console.log(`  binding     : ${HOST}:${port}${HOST === "0.0.0.0" ? " (all interfaces)" : ""}`);
+  console.log(`  environment : ${process.env.NODE_ENV || "development"}`);
   console.log(`  static root : ${ROOT}/`);
   console.log(`  api         : /api/auth/{register,login,login/verify-2fa,demo,me,switch-account,reset-demo}`);
   console.log(`  cashier     : /api/auth/{exchange-rate,mpesa/stk-push,card/deposit,trc20/my-address,deposits}`);
@@ -1213,3 +1245,51 @@ server.listen(PORT, HOST, () => {
     console.log(`  note        : unconfigured providers return 503 PAYMENT_PROVIDER_NOT_CONFIGURED; no wallet is ever credited without a verified settlement.`);
   }
 });
+
+/* ------------------------------- shutdown ------------------------------- */
+/**
+ * Railway, Render and Docker all ask a process to stop with SIGTERM before
+ * killing it, and a redeploy is the common case. Without a handler the tick
+ * engine stops mid-write and the connection pool is never released, which is
+ * how a redeploy leaves work half-done at the database. This stops the trading
+ * tick first, tells socket clients this is a shutdown, then lets in-flight
+ * requests finish before releasing the pool.
+ */
+let shuttingDown = false;
+
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`\n${signal} received — stopping the tick engine, the trading socket and the ledger pool`);
+
+  clearInterval(tickTimer);
+  for (const client of sockets) {
+    try {
+      wsClose(client.socket, 1001, "server shutting down");
+      client.socket.end();
+    } catch {
+      /* the socket was already gone */
+    }
+  }
+
+  // A socket that will not close must not hold the deploy open.
+  const force = setTimeout(() => {
+    console.log("  shutdown did not finish in 10s — exiting anyway");
+    process.exit(1);
+  }, 10_000);
+  force.unref();
+
+  server.close(async () => {
+    try {
+      await store.close();
+    } catch (err) {
+      // Worth a line, not a crash: the ledger handle is the last thing here.
+      console.log(`  ledger close failed: ${(err && err.message) || err}`);
+    }
+    console.log("  shutdown complete");
+    process.exit(0);
+  });
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

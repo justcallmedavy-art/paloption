@@ -16,7 +16,7 @@ import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { spawn } from "node:child_process";
-import { createMemoryStore, round2 } from "../tools/store.mjs";
+import { createMemoryStore, round2, needsSsl } from "../tools/store.mjs";
 import { patchApiBase, apiBaseFromEnv } from "../tools/client-patches.mjs";
 
 const FRONTEND = "https://paloption.vercel.app";
@@ -278,5 +278,28 @@ describe("storage guarantees", () => {
     assert.equal((await store.findPending2fa("tmp_1"))?.code, "123456", "a wrong code must not consume it");
     assert.equal((await store.takePending2fa("tmp_1"))?.code, "123456");
     assert.equal(await store.findPending2fa("tmp_1"), null, "a used challenge is gone");
+  });
+});
+
+describe("choosing TLS from the connection string", () => {
+  test("Railway's private address stays plaintext while its public proxy does not", () => {
+    assert.equal(
+      needsSsl("postgresql://postgres:pw@postgres.railway.internal:5432/railway"),
+      false,
+      "the project's private network does not offer TLS, so requesting it would fail the connection"
+    );
+    assert.equal(
+      needsSsl("postgresql://postgres:pw@turntable.proxy.rlwy.net:12345/railway"),
+      true,
+      "the public proxy refuses a plaintext connection"
+    );
+    assert.equal(needsSsl("postgresql://postgres:pw@containers-us-west-1.railway.app:6789/railway"), true);
+  });
+
+  test("the hosts that were already handled behave as before", () => {
+    assert.equal(needsSsl("postgresql://user:pw@localhost:5432/paloption"), false);
+    assert.equal(needsSsl("postgresql://u:p@host/db?sslmode=require"), true);
+    assert.equal(needsSsl("postgresql://u:p@ep-x.us-east-2.aws.neon.tech/db"), true);
+    assert.equal(needsSsl(""), false, "no connection string cannot mean a TLS requirement");
   });
 });
