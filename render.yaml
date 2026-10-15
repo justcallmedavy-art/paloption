@@ -15,13 +15,26 @@
 # DATABASE_URL is wired from the database below, so the service never sees an
 # in-memory ledger: NODE_ENV=production makes an absent DATABASE_URL a boot error.
 #
-# NOTE: Render's free Postgres plan expires; `basic-256mb` is the smallest paid
-# one and is what a deployment that must stay up should use.
+# NOTE — WHAT THE FREE PLAN COSTS YOU, because free is what this file asks for:
+#
+#   * a free web service sleeps after about 15 minutes without a request. The
+#     trading socket drops with it, the 1-second tick engine stops, and the next
+#     visitor waits through a cold start. Open positions are safe — settlement
+#     is a guard in the SQL statement, not a timer that a sleeping process
+#     holds — but a running auto-trading bot lives in memory and is lost (see
+#     the limitation in DEPLOY.md §7).
+#   * a free Postgres instance EXPIRES 30 days after creation, then gets a
+#     14-day grace period to upgrade before Render deletes it. Move to a paid
+#     plan before then or the ledger goes with it. (Both figures are Render's
+#     own: https://render.com/docs/free.)
+#
+# For a deployment that must stay awake, change the two `plan:` values below to
+# `starter` (web) and `basic-256mb` (database). Nothing else needs to change.
 services:
   - type: web
     name: paloption-api
     runtime: node
-    plan: starter
+    plan: free
     region: oregon
     buildCommand: npm ci --omit=dev
     startCommand: npm start
@@ -121,5 +134,5 @@ services:
 
 databases:
   - name: paloption-db
-    plan: basic-256mb
+    plan: free
     postgresMajorVersion: "16"

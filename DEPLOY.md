@@ -82,7 +82,16 @@ Set these environment variables on the host:
 
 ### Render (blueprint included)
 
-`render.yaml` provisions the service **and** its Postgres together:
+`render.yaml` provisions the service **and** its Postgres together. It requests
+the **free** plans, so read the note at the top of that file before you deploy:
+the web service spins down after 15 minutes idle — which drops the trading
+socket and stops the tick engine, and loses a running bot session with the
+process — and the free database expires 30 days after creation, with a 14-day
+grace period before deletion ([render.com/docs/free](https://render.com/docs/free)).
+Open positions survive the sleep; they settle on a guard inside the SQL
+statement rather than on a timer a sleeping process holds.
+
+The steps:
 
 1. Push this repository to GitHub.
 2. Render → **New → Blueprint** → pick the repository.
