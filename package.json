@@ -14,6 +14,7 @@
     "test": "node --test tests/*.test.mjs",
     "start": "node tools/server.mjs",
     "migrate": "node tools/migrate.mjs",
+    "verify:cashier": "node tools/verify-cashier.mjs",
     "deploy:snapshot": "node tools/prepare-deploy.mjs",
     "deploy:api": "node tools/prepare-api.mjs",
     "deploy:api:check": "node tools/prepare-api.mjs --check",

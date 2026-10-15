@@ -421,6 +421,21 @@ export function createMemoryStore({ db = emptyDb() } = {}) {
       Object.assign(deposit, patch);
       return deposit;
     },
+    /**
+     * Fails a deposit only while it is still pending. Returns null otherwise.
+     *
+     * A late or duplicated provider result must never un-pay money that has
+     * already been credited. Flipping a settled deposit back to `failed` leaves
+     * the ledger and the deposit row disagreeing, and the depositor is shown
+     * "failed" for a payment their own handset confirms they made.
+     */
+    async failDepositIfUnsettled(id, patch) {
+      gate();
+      const deposit = state.deposits.find((d) => d.id === id);
+      if (!deposit || deposit.status !== "pending") return null;
+      Object.assign(deposit, patch);
+      return deposit;
+    },
     async listDepositsByUser(userId, limit = 100) {
       return state.deposits.filter((d) => d.user_id === userId).slice(0, limit);
     },
@@ -785,6 +800,31 @@ export async function createPostgresStore({ connectionString, ssl, poolSize = 10
         }
         if (!sets.length) return null;
         const { rows } = await q(`UPDATE deposits SET ${sets.join(", ")} WHERE id = $1 RETURNING *`, params);
+        return depositFromRow(rows[0]);
+      },
+      /**
+       * Fails a deposit only while it is still pending — the guard is in the
+       * WHERE clause, so it is one atomic statement and cannot lose a race
+       * against a concurrent settlement. Returns null if it was not pending.
+       */
+      async failDepositIfUnsettled(id, patch) {
+        const allowed = [
+          "status", "provider_reference", "checkout_request_id", "merchant_request_id",
+          "mpesa_result_code", "failure_reason", "verified_amount", "completed_at",
+          "settlement_amount", "settlement_rate", "settlement_currency",
+        ];
+        const sets = [];
+        const params = [id];
+        for (const [key, value] of Object.entries(patch)) {
+          if (!allowed.includes(key)) continue;
+          params.push(value);
+          sets.push(`${key} = $${params.length}`);
+        }
+        if (!sets.length) return null;
+        const { rows } = await q(
+          `UPDATE deposits SET ${sets.join(", ")} WHERE id = $1 AND status = 'pending' RETURNING *`,
+          params
+        );
         return depositFromRow(rows[0]);
       },
       async listDepositsByUser(userId, limit = 100) {

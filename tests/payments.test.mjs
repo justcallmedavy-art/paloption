@@ -434,6 +434,53 @@ describe("the M-Pesa result callback", () => {
     }
   });
 
+  test("a late non-zero result cannot un-pay a deposit that already settled", async () => {
+    const h = harness({ env: CALLBACK_ENV, providers: stkFixture(), exchange: rateFixture(130) });
+    try {
+      const deposit = await pending(h);
+
+      // The customer pays, and it settles.
+      await fire(h, TOKEN, callbackFor("ws_CO_FIXTURE_1", { amount: 1300, receipt: "MPESA_RCPT_FIXTURE_1" }));
+      assert.equal(deposit.status, "completed");
+      assert.equal(h.user.real_balance, 10);
+
+      // Then a NON-ZERO result for the same checkout id arrives. Safaricom does
+      // this: a push that times out on the handset can report after the payment
+      // it is describing has already been credited.
+      const late = await fire(
+        h,
+        TOKEN,
+        callbackFor("ws_CO_FIXTURE_1", { resultCode: 1037, desc: "DS timeout user cannot be reached." })
+      );
+      assert.equal(late.ResultCode, 0, "still acknowledged, so Safaricom stops retrying");
+
+      assert.equal(deposit.status, "completed", "a settled deposit must not be flipped to failed");
+      assert.equal(deposit.failure_reason, null, "and must not acquire a failure reason");
+      assert.equal(h.user.real_balance, 10, "credited money stays credited");
+      assert.equal(h.db.transactions.length, 1, "and no second ledger entry appears");
+      assert.equal(
+        h.db.mpesa_callbacks[0].outcome,
+        "ignored_after_settlement",
+        "the contradiction is recorded for reconciliation rather than acted on"
+      );
+    } finally {
+      h.restore();
+    }
+  });
+
+  test("a late non-zero result still fails a deposit that is genuinely pending", async () => {
+    const h = harness({ env: CALLBACK_ENV, providers: stkFixture(), exchange: rateFixture(130) });
+    try {
+      const deposit = await pending(h);
+      await fire(h, TOKEN, callbackFor("ws_CO_FIXTURE_1", { resultCode: 1037, desc: "DS timeout user cannot be reached." }));
+      assert.equal(deposit.status, "failed", "the guard must not stop a real failure");
+      assert.equal(deposit.mpesa_result_code, 1037);
+      assert.equal(h.db.mpesa_callbacks[0].outcome, "not_paid");
+    } finally {
+      h.restore();
+    }
+  });
+
   test("an underpaid result is refused rather than credited", async () => {
     const h = harness({ env: CALLBACK_ENV, providers: stkFixture(), exchange: rateFixture(130) });
     try {

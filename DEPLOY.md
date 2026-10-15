@@ -197,6 +197,25 @@ Then, in a browser on the deployed frontend:
 - [ ] The cashier returns a real quote on `/api/auth/exchange-rate`, and an
       M-Pesa push returns `pending` (never a credit) before the callback lands.
 
+### The cashier, proved against a running server
+
+```bash
+npm run verify:cashier -- --sandbox --api https://<api-host>
+```
+
+`tools/verify-cashier.mjs` drives the deployed HTTP surface and posts callbacks
+to the deployment's OWN public callback URL, exactly as Safaricom posts them:
+a push settles nothing; the success callback credits once; a replay credits
+nothing further; a forged `CheckoutRequestID` credits nothing; an under-payment
+is refused and left pending; and finally every credited dollar must match a
+completed deposit. That last check is the one that catches a ledger and a
+deposit record disagreeing.
+
+`--sandbox` is mandatory and not a formality: the tool forges a *successful*
+callback, so it must never be pointed at an instance configured for production
+Daraja, where the callback token would be the only thing between a wallet and a
+free credit. It reads `DARAJA_CALLBACK_TOKEN` and never prints it.
+
 ## 6. Security notes
 
 - **Origins.** `ALLOWED_ORIGINS` gates both the API and the trading socket. A
@@ -223,9 +242,23 @@ Then, in a browser on the deployed frontend:
   that is what closes this gap.
 - Bot sessions live in memory: a restart stops a running bot. The trades it had
   already opened are unaffected, and the panel shows the last session.
-- `DARAJA_ENV=sandbox` with the shared sandbox test number cannot approve a till
-  prompt, so sandbox pushes return a non-zero `ResultCode` and credit nothing.
-  Use a handset you can answer.
+- **The sandbox never approves the documented test number.** Measured against a
+  live sandbox push to `254708374149`: the request is *accepted* — a real
+  `CheckoutRequestID` comes back — and the callback then reports a non-zero
+  result. Observed verbatim as "DS timeout user cannot be reached.", "No response
+  from user." and "Request Cancelled by user." across 17 pushes, with **no
+  approval ever**. A sandbox run therefore proves the wiring, never a credit;
+  only a handset you can answer proves the money path.
+- **Sandbox callbacks are slow, unordered, and sometimes absent.** Arrivals were
+  measured between t+1s and t+26s, and several pushes received no result at all
+  within 120s. Nothing may assume a callback is coming — and, because a result
+  can land *after* a deposit has already been settled, a non-zero result must
+  never be allowed to overwrite a settled deposit. That last case is a real
+  defect this deployment had: `mpesaCallback` failed the deposit with an
+  unguarded write, so a late timeout could flip a credited deposit to `failed`
+  while the money stayed in the wallet. The guard now lives in the statement
+  (`failDepositIfUnsettled`, `AND status = 'pending'`), and the contradictory
+  delivery is recorded as `ignored_after_settlement` instead.
 - **Restart persistence is only meaningful against Postgres** and has not been
   demonstrated end to end: the local suite runs the in-memory store, where a
   restart is expected to lose state. The step in §5 is what proves it.

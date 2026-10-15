@@ -917,12 +917,27 @@ export function createPaymentRoutes({
       // was short — means no money moved. Record it and fail the intent; a
       // failed deposit can never later be settled.
       if (entry.result_code !== 0) {
-        await store.updateDeposit(deposit.id, {
+        // Fail it ONLY while it is still pending.
+        //
+        // Safaricom delivers results seconds apart, retries them, and is not
+        // ordered: a non-zero result can legitimately arrive after a zero one
+        // has already settled this same deposit. Letting that write land would
+        // flip a paid deposit to `failed` with the money still sitting in the
+        // ledger — the record and the ledger disagreeing is the one state a
+        // reconciliation cannot untangle, and the depositor is shown "failed"
+        // for a payment their own handset confirms they made. The guard is
+        // inside the statement, so it cannot lose a race with a settlement.
+        const failed = await store.failDepositIfUnsettled(deposit.id, {
           mpesa_result_code: entry.result_code,
           failure_reason: stk.ResultDesc || `MPESA_RESULT_${entry.result_code}`,
           status: "failed",
         });
-        await recordCallback("not_paid");
+        await recordCallback(
+          failed ? "not_paid" : "ignored_after_settlement",
+          failed
+            ? {}
+            : { settlement_error: "a non-zero result arrived for a deposit that was already settled" }
+        );
         return { ResultCode: 0, ResultDesc: "Accepted" };
       }
 
