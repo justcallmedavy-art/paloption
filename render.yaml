@@ -45,6 +45,21 @@ services:
       # ORIGIN_NOT_ALLOWED.
       - key: ALLOWED_ORIGINS
         sync: false
+
+      # The USDT (TRC20) wallet depositors are told to send to. THIS ONE MOVES
+      # MONEY, so read it before deploying.
+      #
+      # Left unset, the service falls back to a wallet built into the source
+      # (DEFAULT_TRON_DEPOSIT_ADDRESS in tools/payments.mjs) that is NOT YOURS,
+      # and every depositor is shown it. Set this to an address you control, or
+      # set it to an empty string to switch the static wallet off so the route
+      # answers 503 instead of quoting an address nobody here can spend from.
+      #
+      # It is one shared address, not one per depositor: it cannot tell two
+      # depositors apart, so crediting a deposit still needs an on-chain
+      # confirmation you verify yourself. See PAYMENTS.md.
+      - key: TRON_DEPOSIT_ADDRESS
+        sync: false
       # Kept out of the client: the callback path carries this token, and it is
       # the only thing protecting a public route Daraja must reach.
       - key: DARAJA_CALLBACK_TOKEN

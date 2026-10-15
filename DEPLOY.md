@@ -74,6 +74,7 @@ Set these environment variables on the host:
 | `DARAJA_SHORTCODE` / `DARAJA_PASSKEY` | for M-Pesa | the paybill shortcode and its passkey |
 | `DARAJA_CALLBACK_TOKEN` | for M-Pesa | long and random: `node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"` |
 | `DARAJA_CALLBACK_URL` | for M-Pesa | `https://<api-host>/api/auth/mpesa/callback/<token>` |
+| `TRON_DEPOSIT_ADDRESS` | before taking deposits | a TRON address **you control**. Left unset, every depositor is shown a wallet hardcoded in the source that is not yours; the boot log warns `WARNING : TRON_DEPOSIT_ADDRESS is not set`. An empty string switches the static wallet off deliberately |
 | `PORT` | no | usually set by the host; defaults to 4174 |
 
 ### Render (blueprint included)
@@ -84,9 +85,17 @@ Set these environment variables on the host:
 2. Render → **New → Blueprint** → pick the repository.
 3. Render reads `render.yaml` and asks for the `sync: false` values: leave
    `ALLOWED_ORIGINS` **empty** (this service serves the client, so its requests
-   are same-origin) and fill in the `DARAJA_*` credentials you have. The rest of
-   the M-Pesa set can stay blank and be filled in later — see §4, the callback
-   URL does not exist until the service does.
+   are same-origin), set `TRON_DEPOSIT_ADDRESS` to a wallet you control (or leave
+   it empty only if you do not want to offer USDT deposits at all — unset means
+   depositors are shown a built-in wallet that is not yours), and fill in the
+   `DARAJA_*` credentials you have. The rest of the M-Pesa set can stay blank
+   and be filled in later — see §4, the callback URL does not exist until the
+   service does.
+
+   Confirm what the instance decided at boot: the log prints
+   `WARNING : TRON_DEPOSIT_ADDRESS is not set …` whenever the built-in wallet is
+   in play, and `providers : daraja=… card=… tron=…` says which cashiers are
+   live.
 4. Deploy. The health check polls `/healthz`, which reports which storage is in
    use, so a deployment that lost its database shows as unhealthy rather than
    quietly serving from memory.

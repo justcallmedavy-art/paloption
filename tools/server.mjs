@@ -996,8 +996,13 @@ async function requireUser(ctx) {
  * decided", so the default applies; an explicit value — including an empty
  * string — is respected, which is how the static wallet is turned off.
  * See PAYMENTS.md.
+ *
+ * Remembered, because the boot log must not call this "configured": a
+ * deployment that never named a wallet is showing depositors the built-in one,
+ * which is not the deployer's, and nothing else on screen would say so.
  */
-if (process.env.TRON_DEPOSIT_ADDRESS === undefined) {
+const usingBuiltInTronWallet = process.env.TRON_DEPOSIT_ADDRESS === undefined;
+if (usingBuiltInTronWallet) {
   process.env.TRON_DEPOSIT_ADDRESS = DEFAULT_TRON_DEPOSIT_ADDRESS;
 }
 
@@ -1195,6 +1200,9 @@ server.listen(PORT, HOST, () => {
   console.log(`  providers   : daraja=${p.daraja.configured ? "configured" : "NOT CONFIGURED"}` +
     ` card=${p.card.configured ? "configured" : "NOT CONFIGURED"}` +
     ` tron=${p.tron.configured ? "configured" : "NOT CONFIGURED"}`);
+  if (usingBuiltInTronWallet) {
+    console.log(`  WARNING     : TRON_DEPOSIT_ADDRESS is not set, so USDT deposits are shown the built-in wallet ${DEFAULT_TRON_DEPOSIT_ADDRESS} — it is not yours. Set TRON_DEPOSIT_ADDRESS, or set it to an empty string to disable the static wallet.`);
+  }
   if (p.daraja.blocked) {
     console.log(`  note        : DARAJA_ENV=production is set but DARAJA_ALLOW_PRODUCTION=1 is not — this instance will not charge a real shortcode.`);
   }
