@@ -1040,14 +1040,35 @@ describe("payment intent flow (fixture providers only)", () => {
 });
 
 describe("HTTP surface", () => {
+  let stub;
   let child;
   let base;
   let childErrors = "";
 
   before(async () => {
+    // A stand-in exchange-rate feed, for the same reason the end-to-end suite
+    // below has one: this server is spawned, so without a stub the
+    // /api/auth/exchange-rate assertion below dials open.er-api.com over the
+    // public internet, and a blip there fails the suite while the server is
+    // behaving exactly as documented — it answers 503
+    // EXCHANGE_RATE_UNAVAILABLE rather than inventing a rate. Measured: one full
+    // run in five went red with `503 !== 200`, and pointing
+    // EXCHANGE_RATE_API_URL at a closed port reproduces it every time.
+    stub = http.createServer((req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({ result: "success", base_code: "USD", rates: { USD: 1, KES: 130 }, time_last_update_utc: "Wed, 14 Oct 2026 00:00:00 +0000" })
+      );
+    });
+    await new Promise((r) => stub.listen(0, "127.0.0.1", r));
+    const stubUrl = `http://127.0.0.1:${stub.address().port}`;
+
     // PORT=0: the OS picks a free port and the server reports it, so a leftover
     // process from an earlier run can never collide with this one.
-    child = spawn(process.execPath, ["tools/server.mjs", "0"], { stdio: ["ignore", "pipe", "pipe"], env: serverEnv() });
+    child = spawn(process.execPath, ["tools/server.mjs", "0"], {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: serverEnv({ EXCHANGE_RATE_API_URL: `${stubUrl}/latest/USD` }),
+    });
     child.stderr.on("data", (buf) => { childErrors += buf.toString(); });
 
     base = await new Promise((resolve, reject) => {
@@ -1067,6 +1088,7 @@ describe("HTTP surface", () => {
 
   after(() => {
     if (child) child.kill();
+    if (stub) stub.close();
     if (/Error|EADDRINUSE/.test(childErrors)) {
       throw new Error(`the server wrote to stderr:\n${childErrors}`);
     }
@@ -1090,16 +1112,17 @@ describe("HTTP surface", () => {
   test("the four previously-404ing routes are real handlers now", async () => {
     const token = (await (await post("/api/auth/demo", {})).json()).token;
 
-    // No token: this is exactly how the mirrored client calls it.
+    // No token: this is exactly how the mirrored client calls it. The status is
+    // asserted strictly because the feed behind it is the stub above, so a 503
+    // here means this server could not read a rate it was handed, not that the
+    // internet was busy.
     const rate = await fetch(`${base}/api/auth/exchange-rate`);
     assert.equal(rate.status, 200, "exchange-rate must not 404, and must not demand a token");
     const rateBody = await rate.json();
-    assert.ok(rateBody.pair === "USD/KES" || rateBody.code === "EXCHANGE_RATE_UNAVAILABLE");
-    if (rateBody.pair === "USD/KES") {
-      assert.ok(rateBody.rate > 0, "a real rate is served, never a hardcoded one");
-      assert.ok(rateBody.source, "the rate names its source");
-      assert.ok(rateBody.updated_at, "and when it was updated");
-    }
+    assert.equal(rateBody.pair, "USD/KES", "the stubbed feed publishes KES, so a rate is served");
+    assert.equal(rateBody.rate, 130, "and it is the rate the feed gave, not a hardcoded one");
+    assert.ok(rateBody.source, "the rate names its source");
+    assert.ok(rateBody.updated_at, "and when it was updated");
 
     const mpesa = await post("/api/auth/mpesa/stk-push", { amount: 10, phone: "0712345678" }, token);
     assert.notEqual(mpesa.status, 404, "mpesa route must exist");
