@@ -524,23 +524,30 @@ cmd //c "cmdkey /list"      # Git Bash; MSYS rewrites a bare /list into a path
 or in the GUI: **Control Panel → User account → Credential Manager → Windows
 Credentials → `git:https://github.com`**.
 
-Two commands are all the store needs — a rotation is this pair, and nothing else
-has to change:
+Storing a replacement is one command, and erasing an entry is the other:
 
 ```bash
-# forget the stored credential, before storing a new one
-printf 'protocol=https\nhost=github.com\nusername=justcallmedavy-art\n\n' | git credential reject
-
-# store a new one without echoing it and without it reaching the history
+# store it, without echoing it and without it reaching the history
 read -rsp "Paste the token: " NEW_TOKEN && echo
 printf 'protocol=https\nhost=github.com\nusername=justcallmedavy-art\npassword=%s\n\n' "$NEW_TOKEN" | git credential approve
 unset NEW_TOKEN
+
+# forget the stored credential — only when the entry belongs to another
+# account, or you want the store empty before storing one at all
+printf 'protocol=https\nhost=github.com\nusername=justcallmedavy-art\n\n' | git credential reject
 ```
 
 `read -s` keeps the paste off the screen, and because the token only ever appears
 as `$NEW_TOKEN` the shell's history holds the command rather than the secret. It
 does not belong in a tracked file, a script, `deploy/`, or an environment
 variable the app reads — no part of this application consumes it.
+
+The target is `git:https://github.com` whatever the username, so `approve`
+replaces the entry rather than adding a second one, and a second `approve` for
+the same host simply wins. That ordering is deliberate: store the replacement
+first, check it with the probe below, and only then throw anything away — a bad
+paste is then one more paste, instead of a working credential that is already
+gone.
 
 ### The token: two permissions, and why the second one is needed here
 
