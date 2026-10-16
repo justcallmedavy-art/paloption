@@ -13,7 +13,8 @@ browser ──https──> paloption-api.onrender.com   (client + /api/* + /ws)
 Nothing has to be built or uploaded, `ALLOWED_ORIGINS` stays empty, and the
 client's API base resolves to same-origin — which is what the service prints at
 boot (`api base : same-origin`). Go through §1, §2 and §4, then skip §3 and read
-§5 with `WEB` set to your API host.
+§5 with `WEB` set to your API host. §9 is the push recipe, for whoever is doing
+the committing.
 
 The split layout below is the alternative, and it costs you a CORS
 configuration plus a frontend rebuild whenever the API moves. The Railway
@@ -491,3 +492,174 @@ Request and response shapes for the socket (`price`, `balance_update`,
 top of `tools/server.mjs`, which is also where the two easy-to-get-wrong details
 live: `action` sits at the message root, not inside `data`, and
 `auto_trading_response` carries `session` at the root.
+
+---
+
+## 9. Pushing changes (Windows)
+
+Nothing in this repository needs a GitHub credential except the push itself: CI
+authenticates with the `GITHUB_TOKEN` its runner provides, and a deploy is done
+from the host's dashboard. So this section is only about getting a commit onto
+`origin/main` from a Windows machine — and about what each rejection means.
+
+### Where the credential lives
+
+The remote is HTTPS and Git Credential Manager is the configured helper, so the
+token is in neither the remote URL nor any file here:
+
+```bash
+git remote -v                          # origin -> github.com/justcallmedavy-art/paloption.git
+git config --get credential.helper     # manager
+```
+
+The credential itself is a **Windows Credential Manager** entry, target
+`git:https://github.com`, owned by `justcallmedavy-art` — the repository owner,
+and the username a push authenticates as. Look at it without printing the
+secret:
+
+```bash
+cmd //c "cmdkey /list"      # Git Bash; MSYS rewrites a bare /list into a path
+```
+
+or in the GUI: **Control Panel → User account → Credential Manager → Windows
+Credentials → `git:https://github.com`**.
+
+Two commands are all the store needs — a rotation is this pair, and nothing else
+has to change:
+
+```bash
+# forget the stored credential, before storing a new one
+printf 'protocol=https\nhost=github.com\nusername=justcallmedavy-art\n\n' | git credential reject
+
+# store a new one without echoing it and without it reaching the history
+read -rsp "Paste the token: " NEW_TOKEN && echo
+printf 'protocol=https\nhost=github.com\nusername=justcallmedavy-art\npassword=%s\n\n' "$NEW_TOKEN" | git credential approve
+unset NEW_TOKEN
+```
+
+`read -s` keeps the paste off the screen, and because the token only ever appears
+as `$NEW_TOKEN` the shell's history holds the command rather than the secret. It
+does not belong in a tracked file, a script, `deploy/`, or an environment
+variable the app reads — no part of this application consumes it.
+
+### The token: two permissions, and why the second one is needed here
+
+A classic token with the single `repo` scope covers every push except one, and
+this repository is the case that needs the exception: `.github/workflows/` is
+tracked, so a push whose commits touch a workflow file is refused unless the
+credential may edit workflows. For a classic token that is the `workflow`
+**scope**; for a fine-grained token it is the **Workflows** repository
+*permission* — there is no `workflow` scope on a fine-grained token, and looking
+for one is the usual dead end. (A write-enabled deploy key gets past it too,
+being a different kind of credential, but a fine-grained token is the one to
+reach for and the one this project stores.)
+
+Create it at **Profile → Settings → Developer settings → Personal access tokens
+→ Fine-grained tokens → Generate new token**:
+
+| Field | Value |
+| --- | --- |
+| Resource owner | `justcallmedavy-art` — the account that owns the repository |
+| Repository access | **Only select repositories** → `paloption` |
+| Repository permissions → Contents | **Read and write** — the push itself |
+| Repository permissions → Workflows | **Read and write** — committing under `.github/workflows/` |
+| Expiration | the shortest you will keep re-picking; the classic token this replaced expired a month after it was made, and a credential that expires mid-task is indistinguishable from a broken remote |
+
+Nothing else belongs on it: the app's remaining GitHub needs are either public
+or supplied by the runner, so no `Administration`, no `Secrets`, no organisation
+access. The username stays `justcallmedavy-art` — over HTTPS the account name is
+not what authenticates, so a fine-grained token replaces a classic one
+one-for-one with no remote change.
+
+To read the stored token's scopes and expiry without printing it:
+
+```bash
+TOKEN=$(printf 'protocol=https\nhost=github.com\n\n' | git credential fill | sed -n 's/^password=//p')
+printf 'header = "Authorization: Bearer %s"\nurl = "https://api.github.com/user"\n' "$TOKEN" \
+  | curl -sS -K - -D - -o /dev/null | grep -iE '^x-oauth-scopes|github-authentication-token-expiration'
+unset TOKEN
+```
+
+`curl -K -` takes the request, token and all, from the pipe rather than from the
+command line, so it stays out of the process list. A classic token answers
+`X-OAuth-Scopes: repo`; a fine-grained one reports permissions instead, and in
+either case the expiry date, when the token has one, is in
+`github-authentication-token-expiration`.
+
+### Before pushing
+
+```bash
+git status                             # what is modified, and what is untracked
+git fetch origin                       # what the remote has that you do not
+git rev-parse --abbrev-ref HEAD        # main
+git rev-parse HEAD origin/main         # two identical SHAs means nothing to pull first
+git remote -v                          # origin -> github.com/justcallmedavy-art/paloption.git
+```
+
+Then the two checks CI runs on every push. `npm test` needs nothing but Node:
+
+```bash
+npm test
+```
+
+The frontend gate judges an artifact, so build the snapshot the way a deploy
+does, serve it, and read the API base back out of the served bundles:
+
+```bash
+PALOPTION_API_URL=https://<api-host> npm run deploy:snapshot
+npx http-server deploy/paloption -p 4181 -c-1 --silent &
+SRV=$!
+npm run verify:frontend -- --url http://127.0.0.1:4181 \
+  --expect-api https://<api-host> --no-api-health --expect-build deploy/paloption
+STATUS=$?
+kill $SRV
+echo "frontend gate exit=$STATUS"
+```
+
+`--no-api-health` is deliberate: this is judging the artifact, and the API host
+may not exist yet. Withhold it (and pass a reachable `--expect-api`) when the
+question is whether the *deployed* pair is connected — that is §5, and it is what
+the `frontend-live` job runs with nothing withheld.
+
+The PostgreSQL suites are CI's other half and are not needed for a change that
+touches no ledger code; run them the way CI does when a push does (README,
+"Running the same checks locally").
+
+### Commit, then push
+
+Read the diff before staging, and stage the paths you changed rather than
+everything:
+
+```bash
+git diff
+git add DEPLOY.md
+git commit -m "…"
+git push origin main
+```
+
+### Troubleshooting
+
+| What you see | What it means | What to do |
+| --- | --- | --- |
+| `remote: Invalid username or token. Password authentication is not supported for Git operations.` then `fatal: Authentication failed` | The store handed back a token GitHub no longer accepts — expired or revoked | rotate: the `reject` / `approve` pair above |
+| `remote: Permission to justcallmedavy-art/paloption.git denied to <user>` | The token is real but cannot write here: wrong repository selected, or read-only | check **Repository access** and **Contents: Read and write** on the token |
+| `fatal: could not read Username for 'https://github.com'` | No credential stored, and nothing can prompt for one | store one as above |
+| `! [remote rejected] main -> main (refusing to allow a Personal Access Token to create or update workflow .github/workflows/ci.yml without workflow scope)` | The push reached GitHub and was refused because the commit touches `.github/workflows/`, and the credential may not edit workflows | use the fine-grained token with **Workflows: Read and write**, or add the `workflow` scope to a classic one |
+| `! [rejected] main -> main (fetch first)` or `(non-fast-forward)` | The remote moved — another machine, or a merge done in the web UI | `git fetch origin`, re-apply the work on top of `origin/main`, push again |
+| `remote: error: GH013: Repository rule violations found` / `protected branch` | Branch protection wants a pull request | push a branch and open a PR; do not weaken the rule to make one push land |
+| CI red where the same commands passed locally | The runner starts from a clone and the lockfile: no `dist/`, no `.data/`, no `deploy/`, nothing already built | read the failing step's output — the usual cause is a command that only works where something was built before it |
+| `frontend-live` reports *skipped* | Working as intended: the two production variables are unset | set `PRODUCTION_FRONTEND_URL` and `PRODUCTION_API_URL` once a deployment exists (§5) |
+
+One thing to know before blaming a credential: on this repository a *read*
+proves nothing, because it is public — `git ls-remote origin` succeeds with no
+credential at all. The write probe that does answer the question creates nothing:
+
+```bash
+git push --dry-run origin HEAD:refs/heads/paloption-credential-check
+# * [new branch]      HEAD -> paloption-credential-check
+```
+
+`--dry-run` negotiates with GitHub, so a refused or bogus token fails right there
+with exit 128, yet the ref is never created —
+`https://github.com/justcallmedavy-art/paloption/branches` stays unchanged. It is
+the cheapest way to tell a stale credential from a stale remote.

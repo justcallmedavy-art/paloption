@@ -102,6 +102,9 @@ point `PG_TEST_DATABASE_URL` at it. What each suite proves, and the knobs for th
 contention run (`PG_STRESS_*`), are documented in PAYMENTS.md with the rest of
 the payments work.
 
+The push itself — where the credential is stored, the two permissions it needs,
+and what each rejection means — is §9 of [DEPLOY.md](DEPLOY.md).
+
 ## Architecture, in one paragraph
 
 The client asks one module where the server is (`getApiUrl`), and everything
