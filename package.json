@@ -20,6 +20,7 @@
     "verify:cashier": "node tools/verify-cashier.mjs",
     "verify:deploy": "node tools/verify-deploy.mjs",
     "verify:frontend": "node tools/verify-frontend.mjs",
+    "verify:credential": "node tools/verify-credential.mjs",
     "deploy:snapshot": "npm run build && node tools/prepare-deploy.mjs",
     "deploy:api": "node tools/prepare-api.mjs",
     "deploy:api:check": "node tools/prepare-api.mjs --check",

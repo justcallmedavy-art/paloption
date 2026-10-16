@@ -103,7 +103,8 @@ contention run (`PG_STRESS_*`), are documented in PAYMENTS.md with the rest of
 the payments work.
 
 The push itself — where the credential is stored, the two permissions it needs,
-and what each rejection means — is §9 of [DEPLOY.md](DEPLOY.md).
+and what each rejection means — is §9 of [DEPLOY.md](DEPLOY.md), along with `npm run verify:credential`, which
+checks the whole thing against GitHub.
 
 ## Architecture, in one paragraph
 

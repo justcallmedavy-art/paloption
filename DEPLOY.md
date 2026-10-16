@@ -574,20 +574,40 @@ error: failed to push some refs to 'https://github.com/justcallmedavy-art/palopt
 It is about the *content* of the commits, not the ref, so pushing to a branch and
 merging is no way round it — a throwaway branch is refused exactly as `main` is.
 Nothing is created when it refuses (the branch was a 404 afterwards), which is
-what makes this test safe to repeat whenever the credential changes:
+what makes it safe to repeat whenever the credential changes.
+
+### Checking it in one command
 
 ```bash
-git checkout -b workflow-push-probe
-printf '\n# cosmetic probe\n' >> .github/workflows/ci.yml
-git add .github/workflows/ci.yml
-git commit -m "probe: which credential may commit a workflow"
-git push origin workflow-push-probe              # accepted only with Workflows: write
-git push origin --delete workflow-push-probe     # then clean up the branch
-git checkout main && git branch -D workflow-push-probe
+npm run verify:credential                    # both probes
+npm run verify:credential -- --no-workflow   # skip the branch-creating one
+npm run verify:credential -- --remote upstream
 ```
 
-`ci.yml` triggers on `main` and on pull requests only, so the probe branch starts
-no run of its own; if that ever widens, expect a run for the branch.
+`tools/verify-credential.mjs` answers five questions in one report: is a
+credential stored for this remote, which kind is it, does GitHub accept it for
+this repository, does it have write access, and is it close enough to its date to
+matter — fourteen days' notice, because a credential that lapses mid-task is
+indistinguishable from a broken remote. Then it runs the two probes, which are
+writes for the reason below (a read proves nothing here):
+
+- the **auth probe** is `git push --dry-run`, which negotiates with GitHub — a
+  refused or bogus token fails there, with exit 128 — and creates no ref. It
+  pushes the remote's *own* commit rather than local work, so a workflow edit
+  waiting in this checkout cannot turn it into a false failure;
+- the **workflow probe** really pushes a commit whose only difference from `HEAD`
+  is a comment line inside `.github/workflows/`, then deletes the branch it
+  created. That commit is built through a temporary index, so the working tree,
+  `HEAD` and the current branch are never touched — and the report checks that for
+  itself rather than asking you to trust it. `ci.yml` triggers on `main` and on
+  pull requests only, so that branch starts no run of its own; if a trigger ever
+  widens to every branch, expect a run for it.
+
+Exit 0 means every check that ran passed, 1 means one did not, 2 is a usage error.
+A skipped check is printed as `SKIP` with its reason and never as a pass, and a
+`FAIL` on the workflow probe is the refusal quoted above, with what to do about
+it. The token itself is never printed: the report names its kind, its scopes, the
+account it belongs to and its expiry, and nothing else.
 
 Create it at **Profile → Settings → Developer settings → Personal access tokens
 → Fine-grained tokens → Generate new token**:
