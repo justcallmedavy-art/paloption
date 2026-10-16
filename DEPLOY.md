@@ -561,6 +561,34 @@ for one is the usual dead end. (A write-enabled deploy key gets past it too,
 being a different kind of credential, but a fine-grained token is the one to
 reach for and the one this project stores.)
 
+What the refusal looks like is worth recognising on sight, because it reads like
+a network or access problem rather than a permission one. Measured on this
+repository on 2026-10-16, pushing a throwaway branch from a classic `repo`-only
+credential — verbatim, and one long line:
+
+```
+ ! [remote rejected] workflow-push-probe -> workflow-push-probe (refusing to allow a Personal Access Token to create or update workflow `.github/workflows/ci.yml` without `workflow` scope)
+error: failed to push some refs to 'https://github.com/justcallmedavy-art/paloption.git'
+```
+
+It is about the *content* of the commits, not the ref, so pushing to a branch and
+merging is no way round it — a throwaway branch is refused exactly as `main` is.
+Nothing is created when it refuses (the branch was a 404 afterwards), which is
+what makes this test safe to repeat whenever the credential changes:
+
+```bash
+git checkout -b workflow-push-probe
+printf '\n# cosmetic probe\n' >> .github/workflows/ci.yml
+git add .github/workflows/ci.yml
+git commit -m "probe: which credential may commit a workflow"
+git push origin workflow-push-probe              # accepted only with Workflows: write
+git push origin --delete workflow-push-probe     # then clean up the branch
+git checkout main && git branch -D workflow-push-probe
+```
+
+`ci.yml` triggers on `main` and on pull requests only, so the probe branch starts
+no run of its own; if that ever widens, expect a run for the branch.
+
 Create it at **Profile → Settings → Developer settings → Personal access tokens
 → Fine-grained tokens → Generate new token**:
 
