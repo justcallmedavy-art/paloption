@@ -571,6 +571,25 @@ access. The username stays `justcallmedavy-art` — over HTTPS the account name 
 not what authenticates, so a fine-grained token replaces a classic one
 one-for-one with no remote change.
 
+The creation page takes query parameters, so the form can be prefilled instead of
+assembled by hand — and assembling it by hand across sixty permissions is how a
+token ends up without `workflows` ([changelog](https://github.blog/changelog/2025-08-26-template-urls-for-fine-grained-pats-and-updated-permissions-ui/)):
+
+```
+https://github.com/settings/personal-access-tokens/new?name=paloption-push
+  &target_name=justcallmedavy-art&expires_in=90
+  &contents=write&workflows=write
+```
+
+(one line, without the breaks) `target_name` is the resource owner, `expires_in`
+is a number of days from 1 to 366 or `none`, and each permission is a parameter
+whose value is `read`, `write` or `admin` — except `workflows`, which accepts only
+`write`. What the parameters do **not** cover is repository selection:
+**Repository access → Only select repositories → `paloption`** is still yours to
+pick in the form, and it is half of what keeps the token narrow. Leave
+`expires_in` off and the default is 30 days, which is the trap the current token
+fell into.
+
 To read the stored token's scopes and expiry without printing it:
 
 ```bash
