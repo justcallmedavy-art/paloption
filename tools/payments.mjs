@@ -42,12 +42,25 @@ import { createReconciler, reconcileConfig } from "./reconcile.mjs";
  * cannot tell two depositors apart, so attribution still requires an on-chain
  * confirmation you verify yourself — never a client-submitted hash.
  *
- * A deployment enables it by setting `TRON_DEPOSIT_ADDRESS` (which the mirrored
- * server does from this default). Setting that variable to an empty string
- * disables the static wallet and falls back to a custody provider, or to the
- * honest `503` when there is none.
+ * A deployment enables it by setting `TRON_DEPOSIT_ADDRESS` to an address it
+ * controls. Setting that variable to an empty string disables the static wallet
+ * and falls back to a custody provider, or to the honest `503` when there is
+ * none.
+ *
+ * The default below is a demo wallet, and it is NOT switched on by absence. A
+ * public deployment that names no wallet used to inherit it, which meant a real
+ * depositor could be shown an address nobody here can spend from — and a host's
+ * dashboard will not always accept the empty string that turns it off. So the
+ * fallback is now opt-in: `TRON_ALLOW_BUILTIN_WALLET=1`. Without both, USDT
+ * deposits answer `503 PAYMENT_PROVIDER_NOT_CONFIGURED`, which is the honest
+ * state for a deployment that has not decided where the money goes.
  */
 export const DEFAULT_TRON_DEPOSIT_ADDRESS = "TY6nEvWDneE8XuTj7ua8s1dSXdo7dkZWXW";
+
+/** Whether this deployment explicitly asked for the built-in demo wallet. */
+export function builtInWalletAllowed(env = process.env) {
+  return /^(1|true|yes|on)$/i.test(String(env.TRON_ALLOW_BUILTIN_WALLET || "").trim());
+}
 
 /** A TRON base58 address: a `T` followed by 33 base58 characters. */
 export function isTronAddress(value) {

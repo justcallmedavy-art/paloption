@@ -52,6 +52,7 @@ import {
   createPaymentRoutes,
   config as paymentConfig,
   DEFAULT_TRON_DEPOSIT_ADDRESS,
+  builtInWalletAllowed,
 } from "./payments.mjs";
 import {
   patchApiBase,
@@ -1112,8 +1113,13 @@ async function requireUser(ctx) {
  * Remembered, because the boot log must not call this "configured": a
  * deployment that never named a wallet is showing depositors the built-in one,
  * which is not the deployer's, and nothing else on screen would say so.
+ *
+ * The fallback is opt-in (TRON_ALLOW_BUILTIN_WALLET=1). Inheriting a stranger's
+ * wallet by saying nothing was the wrong default for a public deployment, and
+ * some hosts will not accept the empty string that used to turn it off — so
+ * unconfigured now means unconfigured, and the route answers 503.
  */
-const usingBuiltInTronWallet = process.env.TRON_DEPOSIT_ADDRESS === undefined;
+const usingBuiltInTronWallet = process.env.TRON_DEPOSIT_ADDRESS === undefined && builtInWalletAllowed();
 if (usingBuiltInTronWallet) {
   process.env.TRON_DEPOSIT_ADDRESS = DEFAULT_TRON_DEPOSIT_ADDRESS;
 }
@@ -1362,7 +1368,9 @@ server.listen(PORT, HOST, () => {
     ` card=${p.card.configured ? "configured" : "NOT CONFIGURED"}` +
     ` tron=${p.tron.configured ? "configured" : "NOT CONFIGURED"}`);
   if (usingBuiltInTronWallet) {
-    console.log(`  WARNING     : TRON_DEPOSIT_ADDRESS is not set, so USDT deposits are shown the built-in wallet ${DEFAULT_TRON_DEPOSIT_ADDRESS} — it is not yours. Set TRON_DEPOSIT_ADDRESS, or set it to an empty string to disable the static wallet.`);
+    console.log(`  WARNING     : TRON_ALLOW_BUILTIN_WALLET is set and TRON_DEPOSIT_ADDRESS is not, so USDT deposits are shown the built-in demo wallet ${DEFAULT_TRON_DEPOSIT_ADDRESS} — it is not yours.`);
+  } else if (process.env.TRON_DEPOSIT_ADDRESS === undefined) {
+    console.log("  tron wallet : not configured, so USDT deposits answer 503 rather than showing a wallet nobody here can spend from");
   }
   if (p.daraja.blocked) {
     // The reason names the inconsistency, never a credential. A boot log that

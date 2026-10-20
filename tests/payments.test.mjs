@@ -22,6 +22,7 @@ import {
   validateCardFields,
   isTronAddress,
   DEFAULT_TRON_DEPOSIT_ADDRESS,
+  builtInWalletAllowed,
 } from "../tools/payments.mjs";
 
 /* ----------------------------- harness ----------------------------- */
@@ -321,6 +322,31 @@ describe("the static operator wallet", () => {
       const got = await h.routes.trc20Address(h.ctx("token_alice"));
       assert.equal(got.address, WALLET, "the configured wallet wins over a stale entry");
       assert.equal(got.cached, false);
+    } finally {
+      h.restore();
+    }
+  });
+
+  test("the built-in demo wallet is opt-in, never inherited by saying nothing", () => {
+    // This is the deployment that showed a public site an address nobody here
+    // could spend from: it set nothing, and the default applied anyway.
+    assert.equal(builtInWalletAllowed({}), false);
+    assert.equal(builtInWalletAllowed({ TRON_ALLOW_BUILTIN_WALLET: "" }), false);
+    assert.equal(builtInWalletAllowed({ TRON_ALLOW_BUILTIN_WALLET: "0" }), false);
+    assert.equal(builtInWalletAllowed({ TRON_ALLOW_BUILTIN_WALLET: "no" }), false);
+    for (const yes of ["1", "true", "YES", "on"]) {
+      assert.equal(builtInWalletAllowed({ TRON_ALLOW_BUILTIN_WALLET: yes }), true, yes);
+    }
+  });
+
+  test("a deployment that names no wallet refuses instead of serving the demo address", async () => {
+    const h = harness({ env: { TRON_DEPOSIT_ADDRESS: "" } });
+    try {
+      const err = await h.routes.trc20Address(h.ctx("token_alice")).then(() => null, (e) => e);
+      assert.ok(err, "the route must refuse");
+      assert.equal(err.code, "PAYMENT_PROVIDER_NOT_CONFIGURED");
+      assert.equal(JSON.stringify(err).includes(WALLET), false, "the demo wallet is never returned");
+      assert.equal(Object.keys(h.db.trc20_addresses).length, 0, "and nothing is stored for later");
     } finally {
       h.restore();
     }
@@ -1195,15 +1221,17 @@ describe("HTTP surface", () => {
     assert.notEqual(card.status, 404);
     assert.equal(card.status, 503);
 
-    // TRC20 is the one cashier route this mirror actually resolves: the server
-    // ships an operator wallet, so it answers with a real address rather than a
-    // 503. The neighbouring routes still refuse, which is the point of the test.
+    // TRC20 is a real handler too, but this server was started without naming a
+    // wallet — and a deployment that names no wallet must not fall back to the
+    // built-in demo address. It answers the honest 503 instead. That the route
+    // does serve an address when one is configured is pinned by "a configured
+    // wallet is served verbatim" above; this asserts the unconfigured case.
     const trc20 = await fetch(`${base}/api/auth/trc20/my-address`, { headers: { authorization: `Bearer ${token}` } });
     assert.notEqual(trc20.status, 404);
-    assert.equal(trc20.status, 200);
+    assert.equal(trc20.status, 503, "no wallet named, so no wallet is shown");
     const trc20Body = await trc20.json();
-    assert.equal(trc20Body.address, "TY6nEvWDneE8XuTj7ua8s1dSXdo7dkZWXW");
-    assert.equal(trc20Body.network, "TRC20");
+    assert.equal(trc20Body.code, "PAYMENT_PROVIDER_NOT_CONFIGURED");
+    assert.equal(JSON.stringify(trc20Body).includes("TY6nEvWDneE8XuTj7ua8s1dSXdo7dkZWXW"), false, "the demo address never leaks");
   });
 
   test("no endpoint returns 200 with a fake payment success", async () => {
