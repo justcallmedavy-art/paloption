@@ -1296,8 +1296,13 @@ export function createPaymentRoutes({
       // When an operator wallet is configured it is the source of truth, so a
       // cache entry for a *different* address is stale and must not be served:
       // re-pointing the wallet has to reach accounts that already have one.
+      //
+      // An unconfigured deployment serves nothing at all, cached or not. A row
+      // written while a wallet was configured would otherwise outlive the
+      // configuration and keep sending depositors to an address this deployment
+      // no longer stands behind — which is what a cached demo wallet did.
       const existing = await store.getTrc20Address(user.id);
-      if (existing && (!cfg.tron.depositAddress || existing.address === cfg.tron.depositAddress)) {
+      if (existing && cfg.tron.configured && (!cfg.tron.depositAddress || existing.address === cfg.tron.depositAddress)) {
         return { ...existing, cached: true };
       }
 

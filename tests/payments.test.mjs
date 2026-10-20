@@ -339,6 +339,20 @@ describe("the static operator wallet", () => {
     }
   });
 
+  test("a cached address does not outlive the wallet it came from", async () => {
+    // The deployed service did exactly this: it served the demo wallet from the
+    // per-account cache after the configuration that justified it was gone.
+    const h = harness({ env: { TRON_DEPOSIT_ADDRESS: "" } });
+    try {
+      h.db.trc20_addresses[h.user.id] = { address: WALLET, asset: "USDT", network: "TRC20" };
+      const err = await h.routes.trc20Address(h.ctx("token_alice")).then(() => null, (e) => e);
+      assert.ok(err, "a cached row must not be served by an unconfigured deployment");
+      assert.equal(err.code, "PAYMENT_PROVIDER_NOT_CONFIGURED");
+    } finally {
+      h.restore();
+    }
+  });
+
   test("a deployment that names no wallet refuses instead of serving the demo address", async () => {
     const h = harness({ env: { TRON_DEPOSIT_ADDRESS: "" } });
     try {
