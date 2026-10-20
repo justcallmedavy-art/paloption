@@ -1,6 +1,6 @@
-# PalOption mirror (`site/`)
+# StrategyOption mirror (`site/`)
 
-A byte-for-byte local copy of `https://paloptions.com`, produced by
+A byte-for-byte local copy of `https://strategyoptions.com`, produced by
 [tools/mirror.mjs](tools/mirror.mjs). Every file keeps its original URL path, so
 absolute references such as `/_next/static/chunks/*.js` resolve unchanged.
 
@@ -55,12 +55,12 @@ Verified by navigating each route: `/trade`, `/cashier`, `/referrals`,
 
 ## What is deliberately changed
 
-`https://api.paloption.com` is rewritten to `""` in the six chunks that
+`https://api.strategyoptions.com` is rewritten to `""` in the six chunks that
 reference it. The app therefore calls `/api/auth/*` and `/ws` on
 `localhost:4174`, where this project's own server answers them.
 
 This is intentional: without it, the local copy would send whatever you typed in
-the login form to PalOption's **live production API**. Seven references were
+the login form to StrategyOption's **live production API**. Seven references were
 neutralised across six files. To point it back at a real backend, edit
 `REWRITES` in [tools/mirror.mjs](tools/mirror.mjs) and re-run.
 
@@ -303,7 +303,7 @@ derivation may differ from the real feed.
 fully offline operation.
 
 **This is someone else's site.** The markup, styles, scripts, logos and copy are
-PalOption's. Keep `site/` local for development and testing; do not republish or
+StrategyOption's. Keep `site/` local for development and testing; do not republish or
 deploy it as your own.
 
 **This is a simulation.** Balances, prices and settlements are invented locally.

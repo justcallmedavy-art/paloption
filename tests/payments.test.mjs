@@ -351,7 +351,14 @@ describe("the static operator wallet", () => {
 });
 
 describe("the M-Pesa result callback", () => {
-  const CALLBACK_ENV = { ...PROVIDER_ENV, DARAJA_CALLBACK_TOKEN: "cbk_test_token" };
+  // The callback URL must carry the token path: a URL that does not is refused
+  // as inconsistent configuration, because Safaricom's result would 404 and the
+  // deposit would stay pending forever.
+  const CALLBACK_ENV = {
+    ...PROVIDER_ENV,
+    DARAJA_CALLBACK_TOKEN: "cbk_test_token",
+    DARAJA_CALLBACK_URL: "https://example.test/api/auth/mpesa/callback/cbk_test_token",
+  };
   const TOKEN = "cbk_test_token";
 
   /** A STK Push fixture, so a pending deposit can be created without Safaricom. */
@@ -429,6 +436,62 @@ describe("the M-Pesa result callback", () => {
       assert.equal(h.user.real_balance, 0);
       assert.equal(h.db.transactions.length, 0);
       assert.equal(h.db.mpesa_callbacks[0].outcome, "not_paid");
+
+      // The client tells a cancellation apart from a failure by this code, so it
+      // has to survive into the status a browser polls — not just the row.
+      const status = await h.routes.depositStatus({
+        req: { headers: { authorization: "Bearer token_alice" } },
+        params: { reference: deposit.reference },
+      });
+      assert.equal(status.deposit.mpesa_result_code, 1032);
+      assert.equal(status.deposit.status, "failed");
+    } finally {
+      h.restore();
+    }
+  });
+
+  test("a prompt Safaricom could not deliver says so, and keeps the number it went to", async () => {
+    const h = harness({ env: CALLBACK_ENV, providers: stkFixture(), exchange: rateFixture(130) });
+    try {
+      const deposit = await pending(h);
+
+      // The number is recorded, masked: identifiable to the person who typed it,
+      // and not a phone number sitting in a ledger row.
+      assert.equal(deposit.msisdn_masked, "2547****678");
+      assert.ok(
+        !JSON.stringify(deposit).includes("254712345678"),
+        "the unmasked number must not reach the deposit record"
+      );
+
+      // ResultCode 9999 with this sentence is what the live sandbox returned on
+      // 2026-10-18: the push was accepted, and the prompt never reached a phone.
+      const res = await fire(
+        h,
+        TOKEN,
+        callbackFor("ws_CO_FIXTURE_1", { resultCode: 9999, desc: "Error occurred while sending push request." })
+      );
+      assert.equal(res.ResultCode, 0, "Daraja is acknowledged either way");
+      assert.equal(deposit.status, "failed");
+      assert.equal(deposit.mpesa_result_code, 9999);
+      assert.equal(
+        deposit.failure_reason,
+        "Error occurred while sending push request.",
+        "the provider's own sentence is kept verbatim, not rewritten into a guess"
+      );
+      assert.equal(h.user.real_balance, 0, "nothing was credited");
+      assert.equal(h.db.transactions.length, 0);
+
+      // The status a client polls carries the masked number and what to do next.
+      const status = await h.routes.depositStatus({
+        req: { headers: { authorization: "Bearer token_alice" } },
+        params: { reference: deposit.reference },
+      });
+      assert.equal(status.deposit.msisdn_masked, "2547****678");
+      assert.match(status.deposit.failure_hint, /could not deliver the prompt/);
+      assert.ok(
+        !JSON.stringify(status).includes("254712345678"),
+        "no response may carry the number in full"
+      );
     } finally {
       h.restore();
     }

@@ -57,7 +57,7 @@ const schemaUrl = (url, schema) => {
   return parsed.toString();
 };
 
-const SCHEMA = `paloption_recon_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+const SCHEMA = `strategyoption_recon_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
 const FAST = { MPESA_RECONCILE_AFTER_MS: "1000" };
 
 const quiet = () => ({ log: () => {}, warn: () => {}, error: () => {} });
@@ -157,7 +157,7 @@ describe("PostgreSQL reconciliation", () => {
     });
   }
 
-  const routesFor = (target, provider) =>
+  const routesFor = (target, provider, reconcile = FAST) =>
     createPaymentRoutes({
       store: target,
       requireUser: async () => {
@@ -170,7 +170,7 @@ describe("PostgreSQL reconciliation", () => {
         tronDepositAddress: async () => ({ address: "TFixture", network: "TRC20" }),
       },
       exchange: { get: async () => ({ base: "USD", quote: "KES", pair: "USD/KES", rate: 130, fetchedAt: Date.now(), cached: false }) },
-      reconcile: reconcileConfig(FAST),
+      reconcile: reconcileConfig(reconcile),
       logger: quiet(),
     });
 
@@ -296,8 +296,15 @@ describe("PostgreSQL reconciliation", () => {
     const user = await seedAccount("restart");
     await seedPending(user, { reference: "PAL_PG_RESTART", checkoutId: "ws_CO_PG_RESTART", ageMs: 60_000 });
 
+    // A long backoff, deliberately. This asserts that the next attempt is a
+    // fact in the database that a new process reads back — not that a wall clock
+    // outran a 30-second default while the rest of the suite was using the
+    // machine. With a short window, a loaded runner can expire the backoff
+    // between the two runs and fail the test for a reason it is not about.
+    const patient = { ...FAST, MPESA_RECONCILE_BACKOFF_MS: "600000", MPESA_RECONCILE_MAX_BACKOFF_MS: "600000" };
+
     // First attempt: the provider errors, so the deposit is scheduled for later.
-    await routesFor(store, scriptFor({ ws_CO_PG_RESTART: Object.assign(new Error("boom"), { code: "DARAJA_QUERY_FAILED" }) }))
+    await routesFor(store, scriptFor({ ws_CO_PG_RESTART: Object.assign(new Error("boom"), { code: "DARAJA_QUERY_FAILED" }) }), patient)
       ._reconcile.runOnce({ reason: "before restart" });
 
     const first = await store.findDeposit("PAL_PG_RESTART");
@@ -308,7 +315,7 @@ describe("PostgreSQL reconciliation", () => {
     const fresh = await createPostgresStore({ connectionString: schemaUrl(TEST_URL, SCHEMA) });
     try {
       const provider = scriptFor({ ws_CO_PG_RESTART: paid("ws_CO_PG_RESTART", "PGAFTER00001") });
-      const summary = await routesFor(fresh, provider)._reconcile.runOnce({ reason: "after restart" });
+      const summary = await routesFor(fresh, provider, patient)._reconcile.runOnce({ reason: "after restart" });
 
       assert.equal(summary.considered, 0, "the backoff set before the restart is still respected");
       assert.equal(provider.calls.length, 0, "so the provider was not asked again");

@@ -1,4 +1,4 @@
-/* PalOption landing clone — client behaviour
+/* StrategyOption landing clone — client behaviour
    Keeps the SSR'd markup intact and layers on the interactions the original
    hydrates: theme toggle, live BTC/USD ticker + chart, and a trade feed. */
 
@@ -10,7 +10,7 @@
   var toggle = document.getElementById("theme-toggle");
   var saved = null;
   try {
-    saved = localStorage.getItem("paloption-theme");
+    saved = localStorage.getItem("strategyoption-theme");
   } catch (e) {
     saved = null;
   }
@@ -21,7 +21,7 @@
       var next = root.getAttribute("data-theme") === "light" ? "dark" : "light";
       root.setAttribute("data-theme", next);
       try {
-        localStorage.setItem("paloption-theme", next);
+        localStorage.setItem("strategyoption-theme", next);
       } catch (e) {
         /* storage unavailable — session-only toggle */
       }

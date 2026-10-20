@@ -31,7 +31,7 @@ import {
   wsRetryDelay,
 } from "../tools/client-patches.mjs";
 
-const FRONTEND = "https://paloption.vercel.app";
+const FRONTEND = "https://strategyoption.vercel.app";
 const CHUNK = "site/_next/static/chunks/219b97e8e5e970d5.js";
 
 /* ------------------------------------------------------------------ *
@@ -62,15 +62,15 @@ describe("trading socket patch", () => {
     // The heartbeat itself, and the watchdog that closes a socket that hears
     // nothing for 45s — both longer than the 20s interval, so two answers may
     // be missed before a live connection is dropped.
-    assert.match(source, /setInterval\(\(\)=>\{try\{if\(Date\.now\(\)-\(globalThis\.__palOptionWsSeen\|\|0\)>45e3\)/, "watchdog");
+    assert.match(source, /setInterval\(\(\)=>\{try\{if\(Date\.now\(\)-\(globalThis\.__strategyOptionWsSeen\|\|0\)>45e3\)/, "watchdog");
     assert.match(source, /s\.send\(JSON\.stringify\(\{type:"ping"\}\)\)/, "heartbeat send");
     assert.match(source, /\},2e4\)/, "every 20s");
 
     // Liveness is recorded from received frames only, and clears the backoff.
-    assert.match(source, /s\.onmessage=e=>\{globalThis\.__palOptionWsSeen=Date\.now\(\),globalThis\.__palOptionWsAttempt=0;/, "activity is recorded on receipt");
+    assert.match(source, /s\.onmessage=e=>\{globalThis\.__strategyOptionWsSeen=Date\.now\(\),globalThis\.__strategyOptionWsAttempt=0;/, "activity is recorded on receipt");
 
     // The heartbeat is stopped when the socket closes, before the retry.
-    assert.match(source, /s\.__palOptionBeat&&clearInterval\(s\.__palOptionBeat\)/, "the interval does not outlive the socket");
+    assert.match(source, /s\.__strategyOptionBeat&&clearInterval\(s\.__strategyOptionBeat\)/, "the interval does not outlive the socket");
 
     // The upstream fixed delay is gone, replaced by the tested arithmetic.
     assert.equal(source.includes("setTimeout(()=>{b()},3e3)"), false, "the fixed 3s retry is gone");

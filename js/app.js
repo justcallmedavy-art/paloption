@@ -1,7 +1,7 @@
-/* PalOption clone — shared core.
+/* StrategyOption clone — shared core.
  *
- * Frontend clone of paloptions.com. The real client talks to
- * https://api.paloption.com (/api/auth/*, /ws). That backend is not part of the
+ * Frontend clone of strategyoptions.com. The real client talks to
+ * https://api.strategyoptions.com (/api/auth/*, /ws). That backend is not part of the
  * clone, so this file provides a local, in-browser stand-in with the same shape.
  *
  * Everything here is simulation: accounts and balances live in localStorage,
@@ -16,8 +16,8 @@
   /* ------------------------------------------------------------------ *
    * Tiny storage helpers
    * ------------------------------------------------------------------ */
-  var DB_KEY = "paloption-db";
-  var SESSION_KEY = "paloption-session";
+  var DB_KEY = "strategyoption-db";
+  var SESSION_KEY = "strategyoption-session";
   var THEME_KEY = "theme-storage";
 
   function read(key, fallback) {
@@ -60,7 +60,7 @@
     themeStore.state.isDarkTheme = !isDark();
     write(THEME_KEY, themeStore);
     applyTheme();
-    document.dispatchEvent(new CustomEvent("paloption:theme"));
+    document.dispatchEvent(new CustomEvent("strategyoption:theme"));
   }
 
   applyTheme();
@@ -220,7 +220,7 @@
     if (!u) return 0;
     u.balances[mode()] = Math.max(0, (u.balances[mode()] || 0) + delta);
     save();
-    document.dispatchEvent(new CustomEvent("paloption:balance"));
+    document.dispatchEvent(new CustomEvent("strategyoption:balance"));
     return u.balances[mode()];
   }
 
@@ -272,7 +272,7 @@
       if (st.series.length > 60) st.series.shift();
     });
     subscribers.forEach(function (fn) { try { fn(state, ASSETS); } catch (e) { /* isolate listeners */ } });
-    if (window.PalOption.settle) window.PalOption.settle();
+    if (window.StrategyOption.settle) window.StrategyOption.settle();
   }
 
   function start() {
@@ -354,13 +354,13 @@
     });
   });
 
-  document.addEventListener("paloption:balance", function () {
+  document.addEventListener("strategyoption:balance", function () {
     document.querySelectorAll("[data-balance]").forEach(function (el) {
       el.textContent = money(balance());
     });
   });
 
-  window.PalOption = {
+  window.StrategyOption = {
     BRAND: BRAND,
     BRAND_2: BRAND_2,
     api: api,

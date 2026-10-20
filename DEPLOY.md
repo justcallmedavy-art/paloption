@@ -1,11 +1,11 @@
-# Deploying PalOption
+# Deploying StrategyOption
 
 **One origin is the recommended shape, and it needs no frontend deployment.**
 `site/` is in this repository, and `tools/server.mjs` serves it alongside the
 API, so a single backend host gives you the whole application:
 
 ```
-browser ──https──> paloption-api.onrender.com   (client + /api/* + /ws)
+browser ──https──> strategyoption-api.onrender.com   (client + /api/* + /ws)
                        │
                        └──> Postgres
 ```
@@ -24,7 +24,7 @@ serverless host:
 
 | Piece | Where | What runs |
 | --- | --- | --- |
-| Frontend | Vercel (`paloption.vercel.app`) | the static client; no API routes |
+| Frontend | Vercel (`strategyoption.vercel.app`) | the static client; no API routes |
 | Backend | Render / Railway / Fly | `tools/server.mjs` — API, `/ws` trading socket, 1s tick engine, cashier |
 | Database | Render Postgres / Neon | the ledger |
 
@@ -34,9 +34,9 @@ memory. That is exactly what a serverless platform cannot do, which is why the
 frontend is on Vercel and the API is not.
 
 ```
-browser ──https──> paloption.vercel.app   (static client)
+browser ──https──> strategyoption.vercel.app   (static client)
    │
-   └──https/wss──> paloption-api.onrender.com ──> Postgres
+   └──https/wss──> strategyoption-api.onrender.com ──> Postgres
                    /api/*  and  /ws
 ```
 
@@ -72,7 +72,7 @@ Set these environment variables on the host:
 | --- | --- | --- |
 | `DATABASE_URL` | yes | the Postgres connection string above |
 | `NODE_ENV` | yes | `production` — refuses to boot without `DATABASE_URL` |
-| `ALLOWED_ORIGINS` | only for a split deployment | the frontend origin, e.g. `https://paloption.vercel.app` (no trailing slash; comma separate several). **Leave it empty when this service also serves the client** — its requests are same-origin and are accepted with no value at all, which is what the single-origin deployment wants |
+| `ALLOWED_ORIGINS` | only for a split deployment | the frontend origin, e.g. `https://strategyoption.vercel.app` (no trailing slash; comma separate several). **Leave it empty when this service also serves the client** — its requests are same-origin and are accepted with no value at all, which is what the single-origin deployment wants |
 | `DARAJA_ENV` | for M-Pesa | `sandbox` until you are live |
 | `DARAJA_CONSUMER_KEY` / `DARAJA_CONSUMER_SECRET` | for M-Pesa | from your Daraja app |
 | `DARAJA_SHORTCODE` / `DARAJA_PASSKEY` | for M-Pesa | the paybill shortcode and its passkey |
@@ -106,7 +106,7 @@ The steps:
      getting it wrong is the failure that looks like a broken login:
      - **Client stays on Vercel** (the split shape, and what the Railway section
        describes): set it to the frontend's origin exactly,
-       `https://paloption.vercel.app` — no trailing slash. Without it every
+       `https://strategyoption.vercel.app` — no trailing slash. Without it every
        browser request to this API is `403 ORIGIN_NOT_ALLOWED`, sign-in
        included.
      - **This service serves the client too** (one origin): leave it **empty**.
@@ -116,6 +116,13 @@ The steps:
      money. Set it to an empty string only if you do not want to offer USDT
      deposits at all; leaving it **unset** shows depositors a wallet built into
      the source that is not yours.
+   - **`DEDICATED_ACCOUNT_EMAIL`** and **`DEDICATED_ACCOUNT_PASSWORD`** — the
+     one account this deployment creates for itself. A free plan has no shell,
+     so `node tools/provision-account.mjs` has nowhere to run, and the database
+     Render just created contains no rows: the server reads these at boot and
+     creates the account through the ordinary scrypt path, with $10,000 demo and
+     $9.00 real. An account that already exists is reported and left alone, so a
+     redeploy cannot reset a balance. Leave both blank and nothing is created.
    - **`DARAJA_*`** — fill in what you have, or leave blank. Anything left blank
      makes the cashier answer `503 PAYMENT_PROVIDER_NOT_CONFIGURED`, which is
      the honest state. The callback URL cannot be set yet — see §4.
@@ -171,7 +178,7 @@ Required:
 | --- | --- |
 | `NODE_ENV` | `production` — with no `DATABASE_URL` this is a boot error, deliberately |
 | `DATABASE_URL` | `${{<database-service>.DATABASE_URL}}` |
-| `ALLOWED_ORIGINS` | `https://paloption.vercel.app` — the client is on another host here, so without it every request is `403 ORIGIN_NOT_ALLOWED` |
+| `ALLOWED_ORIGINS` | `https://strategyoption.vercel.app` — the client is on another host here, so without it every request is `403 ORIGIN_NOT_ALLOWED` |
 
 Worth knowing:
 
@@ -199,12 +206,12 @@ rather than pretending: no wallet is credited without a verified settlement.
 ### Fly / any container host
 
 ```bash
-docker build -t paloption-api .
+docker build -t strategyoption-api .
 docker run -p 8080:8080 \
   -e DATABASE_URL='postgresql://...' \
   -e NODE_ENV=production \
-  -e ALLOWED_ORIGINS='https://paloption.vercel.app' \
-  paloption-api
+  -e ALLOWED_ORIGINS='https://strategyoption.vercel.app' \
+  strategyoption-api
 ```
 
 Confirm the service is up before touching the frontend:
@@ -226,12 +233,12 @@ For a frontend on its own host, the client reads its API host from a value baked
 into the bundle. Build the snapshot with the API origin set, then upload it:
 
 > Whichever shape you pick, `ALLOWED_ORIGINS` must match it. A client on
-> `paloption.vercel.app` calling an API on another host is refused with
+> `strategyoption.vercel.app` calling an API on another host is refused with
 > `403 ORIGIN_NOT_ALLOWED` until that host is listed *and* the frontend is
 > rebuilt against it.
 
 ```bash
-PALOPTION_API_URL=https://<api-host> npm run deploy:snapshot   # writes deploy/paloption
+STRATEGYOPTION_API_URL=https://<api-host> npm run deploy:snapshot   # writes deploy/strategyoption
 npm run deploy:prod                                            # builds + uploads to Vercel
 ```
 
@@ -239,7 +246,7 @@ npm run deploy:prod                                            # builds + upload
 `dist/styles.css` and `dist/` is gitignored — without that step the command
 fails on a fresh clone with `landing source is missing: dist/styles.css`.
 
-`VITE_API_URL` is accepted as an alias for `PALOPTION_API_URL`. Use the bare
+`VITE_API_URL` is accepted as an alias for `STRATEGYOPTION_API_URL`. Use the bare
 origin — no trailing slash, no `/api` suffix. An `https` value produces a
 `wss://` socket automatically; on an https page a value that would produce a
 plain `ws://` to a public host is upgraded to `wss://` rather than sending the
@@ -249,7 +256,7 @@ The page can also be re-pointed at runtime without a rebuild, which is useful
 when the backend moves:
 
 ```html
-<script>globalThis.__PALOPTION_API_URL__ = "https://api.example"</script>
+<script>globalThis.__STRATEGYOPTION_API_URL__ = "https://api.example"</script>
 ```
 
 The page still returns 200 when that value is wrong or missing, and the only
@@ -257,7 +264,7 @@ symptom is a sign-in that cannot work, so check what the bundle actually
 resolves once the deployment is up:
 
 ```bash
-npm run verify:frontend -- --url https://paloption.vercel.app \
+npm run verify:frontend -- --url https://strategyoption.vercel.app \
                           --expect-api https://<api-host>
 ```
 
@@ -345,7 +352,7 @@ API host to judge against — see §3. It answers the one question the backend
 checker cannot: which host the deployed bundles actually call.
 
 ```bash
-npm run verify:frontend -- --url https://paloption.vercel.app --expect-api https://<api-host>
+npm run verify:frontend -- --url https://strategyoption.vercel.app --expect-api https://<api-host>
 ```
 
 CI runs both halves without being asked. The `frontend` job builds the snapshot
@@ -508,7 +515,7 @@ The remote is HTTPS and Git Credential Manager is the configured helper, so the
 token is in neither the remote URL nor any file here:
 
 ```bash
-git remote -v                          # origin -> github.com/justcallmedavy-art/paloption.git
+git remote -v                          # origin -> github.com/justcallmedavy-art/strategyoption.git
 git config --get credential.helper     # manager
 ```
 
@@ -568,7 +575,7 @@ credential — verbatim, and one long line:
 
 ```
  ! [remote rejected] workflow-push-probe -> workflow-push-probe (refusing to allow a Personal Access Token to create or update workflow `.github/workflows/ci.yml` without `workflow` scope)
-error: failed to push some refs to 'https://github.com/justcallmedavy-art/paloption.git'
+error: failed to push some refs to 'https://github.com/justcallmedavy-art/strategyoption.git'
 ```
 
 It is about the *content* of the commits, not the ref, so pushing to a branch and
@@ -615,7 +622,7 @@ Create it at **Profile → Settings → Developer settings → Personal access t
 | Field | Value |
 | --- | --- |
 | Resource owner | `justcallmedavy-art` — the account that owns the repository |
-| Repository access | **Only select repositories** → `paloption` |
+| Repository access | **Only select repositories** → `strategyoption` |
 | Repository permissions → Contents | **Read and write** — the push itself |
 | Repository permissions → Workflows | **Read and write** — committing under `.github/workflows/` |
 | Expiration | the shortest you will keep re-picking; the classic token this replaced expired a month after it was made, and a credential that expires mid-task is indistinguishable from a broken remote |
@@ -631,7 +638,7 @@ assembled by hand — and assembling it by hand across sixty permissions is how 
 token ends up without `workflows` ([changelog](https://github.blog/changelog/2025-08-26-template-urls-for-fine-grained-pats-and-updated-permissions-ui/)):
 
 ```
-https://github.com/settings/personal-access-tokens/new?name=paloption-push
+https://github.com/settings/personal-access-tokens/new?name=strategyoption-push
   &target_name=justcallmedavy-art&expires_in=90
   &contents=write&workflows=write
 ```
@@ -640,7 +647,7 @@ https://github.com/settings/personal-access-tokens/new?name=paloption-push
 is a number of days from 1 to 366 or `none`, and each permission is a parameter
 whose value is `read`, `write` or `admin` — except `workflows`, which accepts only
 `write`. What the parameters do **not** cover is repository selection:
-**Repository access → Only select repositories → `paloption`** is still yours to
+**Repository access → Only select repositories → `strategyoption`** is still yours to
 pick in the form, and it is half of what keeps the token narrow. Leave
 `expires_in` off and the default is 30 days, which is the trap the current token
 fell into.
@@ -660,6 +667,167 @@ command line, so it stays out of the process list. A classic token answers
 either case the expiry date, when the token has one, is in
 `github-authentication-token-expiration`.
 
+### The push guard: what may leave, and what it says no to
+
+`.github/workflows/` is the one directory here whose contents run on GitHub's
+machines, and the one the credential needs a second permission for. So a push is
+judged on the *content* of its outgoing commits, locally, before anything is
+sent:
+
+```bash
+npm run guard:push        # what the guard would say about this branch — pushes nothing
+npm run guard:install     # make this checkout run it as a pre-push hook
+npm run guard:status      # is the hook active in this checkout?
+npm run guard:audit       # read the authorisation trail — writes nothing
+npm run guard:uninstall   # stop running it
+```
+
+`tools/guard-push.mjs` reads git's own ref updates — the four fields a pre-push
+hook gets on stdin — establishes which commits are actually new, and looks at the
+paths those commits change. New is measured against the remote's current value
+for that ref when the checkout has it, and otherwise against the refs tracked
+under `refs/remotes/<remote>`. An ordinary push passes and says nothing. A push
+whose outgoing commits touch a `.github/workflows/` path is refused, with the
+file named and the remedy printed.
+
+| What the guard refuses | Why | How to proceed |
+| --- | --- | --- |
+| an outgoing commit that changes something under `.github/workflows/` | a workflow file is executable configuration for the runner, and an edit nobody meant to ship is a change to what CI does on the next push | give a reason (below), if the change is intended |
+| a hook line it cannot read, a commit it cannot open, a tree it cannot read | the question could not be answered, and an unanswerable question is not a yes | `git fetch origin` then retry; or `git push --no-verify`, deliberately |
+| a workflow change on a ref the remote **has**, whose value this checkout never fetched | "does this push change CI?" is answerable — `git fetch` answers it — so the answer is not "go ahead" | `git fetch origin`, then push again; or give a reason |
+
+One case is allowed rather than refused, and it is the one that looks most like a
+workflow change: a push whose destination ref the remote **does not have at all**
+— the first push of an existing history to a new remote, a fork, or a mirror.
+Every commit reachable from it would be new there, so nothing local can say
+whether the push *changes* CI: the workflow file it carries is this repository's
+own committed file, part of the history being sent, rather than an edit made for
+the push. Refusing it would block the ordinary case, so it is reported and
+allowed, with what governs it named. On GitHub the credential's own Workflows
+permission is the gate — measured above, and it applies to a throwaway branch
+exactly as it does to `main` — and `npm run verify:credential` is what measures
+it. What that gives up is worth stating plainly: a workflow edit pushed as a
+*new* ref to a remote this checkout has never fetched, with a credential that may
+write workflows, is not caught here.
+
+The reason is the whole authorisation, and it has to be at least twelve
+characters so that it still means something when read back:
+
+```bash
+STRATEGYOPTION_WORKFLOW_PUSH_REASON="add a job that runs the push guard suite" git push
+```
+
+It is printed in the report and appended to `.git/strategyoption-push-guard.log` —
+inside the git directory, so the audit line can never be committed or pushed.
+`--allow-workflow "<reason>"` does the same for one invocation without setting a
+variable. A reason that is empty or too short is not consent: it is reported as
+*not authorised*, with its length, rather than accepted.
+
+The record holds the instant, the kind of event, the destination, the refs, how
+many commits, which `.github/workflows/` paths, where the reason came from, and
+the reason. The destination is written with any userinfo removed —
+`https://user:token@host/o/r.git` becomes `https://<redacted>@host/o/r.git` —
+and that is load-bearing rather than tidy: `git push https://…` hands the hook
+the URL *as* the remote's name, so an unredacted value would be a credential
+sitting in a file that outlives the push.
+
+### Reading the trail: `npm run guard:audit`
+
+```bash
+npm run guard:audit                        # the last 20 records, newest first
+npm run guard:audit -- --limit all         # every one of them
+npm run guard:audit -- --limit 5           # the newest five
+npm run guard:audit -- --outcome refused   # one outcome; the totals still cover the file
+npm run guard:audit -- --check             # verify every record; exit 1 if one cannot be read
+```
+
+It reads that one file and nothing else. It never writes, truncates or rotates
+the trail, never runs a push, and reads no credential — the tests assert the
+bytes, the size and the modification time are identical after `--audit`, `--check`,
+`--limit` and `--outcome` have each run. `STRATEGYOPTION_PUSH_GUARD_LOG` names the file
+outright, which is what lets it read a copy from outside a checkout at all; with
+no such file and no repository it refuses rather than guessing.
+
+**What a record claims, and what it cannot.** A record says the hook let an
+authorised workflow change *proceed*. It does not say GitHub accepted the push,
+and it cannot: a pre-push hook runs before anything is sent, and the credential's
+refusal or a non-fast-forward rejection arrives afterwards. It is not a
+signature either — the file is inside `.git`, which anyone who can push can also
+edit or delete. Read it as a durable note of who authorised what, and why, which
+is exactly what it is; it is not evidence that a push succeeded.
+
+**Two gaps it states out loud.** Refusals are not recorded — they are reported to
+whoever is pushing, at the moment of refusal, and a line per attempt would fill a
+trail whose purpose is the authorisation — so `refused 0` in the totals does not
+mean nothing was ever refused. And a trail is per checkout: a clone, or another
+machine, has its own `.git` and its own file, so `authorised 0` here says nothing
+about a push made somewhere else. If the trail is not wanted at all, delete it
+(`rm .git/strategyoption-push-guard.log`): nothing reads it to decide anything, and it
+can never be committed.
+
+`--check` fails on four things: a line that cannot be read as a record at all, a
+record missing one of its fields or cut short mid-write, a remote value carrying
+userinfo (where a credential would be), and a recorded path that is not under
+`.github/workflows/`. It examines every record in the file, not only the ones
+listed, and says so. A missing or empty file passes — nothing recorded is nothing
+to verify — and what it does *not* check is whether any push was accepted, and
+refusals, for the two reasons above.
+
+Records written before the `kind=` field existed have no kind and are read as
+authorisations, printed as `(legacy record)` with that stated rather than assumed
+— which is every record already on disk, including the `guardprobe` one from
+proving this guard end to end. A value can never forge an entry: it is
+JSON-quoted when written, and escaped again when printed, so a reason containing
+a newline stays one record and one line. Two pushes in the same instant hold no
+lock between them and can be appended in either order; the reader reports
+timestamps that go backwards and does not fail on them.
+
+Three things the guard deliberately does **not** do:
+
+- **It does not probe the remote to decide.** A `git push --dry-run` succeeding
+  says the credential can push at all; it says nothing about whether a change to
+  CI was intended, so authorising on it would be the mistake this exists to
+  prevent. The credential question is the other, server-side gate —
+  `npm run verify:credential` above — and the two are reported separately.
+- **It does not install itself.** Git looks at `.git/hooks` unless
+  `core.hooksPath` says otherwise, and that setting is local rather than
+  committed: a fresh clone has no guard until `npm run guard:install` is run in
+  it. `--install` refuses to overwrite a `core.hooksPath` pointing somewhere
+  else, because two hook paths cannot both be active — that one is yours to
+  reconcile.
+- **It does not touch the credential store.** The only git commands it runs are
+  reads, and every mention of the destination — in the report and in the record —
+  has any userinfo redacted, so a token pasted into a push URL cannot end up in
+  the output or in the trail.
+
+What protects a workflow push independently of the hook:
+
+- **GitHub itself**, which refuses a workflow change from a credential that may
+  not edit workflows. That is the server-side gate, it holds no matter what the
+  local guard says, and `npm run verify:credential` is what measures whether the
+  stored credential passes it.
+- **CI**, which runs the guard's own suite as part of `npm test` on every push.
+  That keeps the rules tested — and it is not authorisation: a CI job cannot tell
+  an intended workflow edit from an unintended one.
+- **A repository ruleset**, if you want the protection that survives
+  `git push --no-verify` and a clone that never ran `guard:install`. Require
+  review for `.github/workflows/**` (Settings → Rules → Rulesets → New branch
+  ruleset → Require a pull request), with a `CODEOWNERS` line naming a reviewer
+  for that path. Neither is part of this repository — a ruleset lives in
+  GitHub's settings, not in a file here — which is why it is written down here
+  instead of implemented.
+
+Recovery, in the order worth trying: read the refusal, which names the file and
+the reason the guard wants; if the change is intended, give the reason and push
+again; if the guard is refusing something it should not, `git push --no-verify`
+(it is git's own escape hatch and it is visible in the command you ran); if the
+hook itself is unwanted in this checkout, `npm run guard:uninstall`. One refusal
+is not about content at all: if the audit line cannot be written — a read-only
+`.git`, or `STRATEGYOPTION_PUSH_GUARD_LOG` pointing at something unwritable — the push
+is refused, because an authorisation that cannot be recorded is not one. And when
+the question is what has been authorised here before, `npm run guard:audit`
+answers it without touching the trail.
+
 ### Before pushing
 
 ```bash
@@ -667,7 +835,8 @@ git status                             # what is modified, and what is untracked
 git fetch origin                       # what the remote has that you do not
 git rev-parse --abbrev-ref HEAD        # main
 git rev-parse HEAD origin/main         # two identical SHAs means nothing to pull first
-git remote -v                          # origin -> github.com/justcallmedavy-art/paloption.git
+git remote -v                          # origin -> github.com/justcallmedavy-art/strategyoption.git
+npm run guard:push                     # would this push carry a workflow change?
 ```
 
 Then the two checks CI runs on every push. `npm test` needs nothing but Node:
@@ -680,11 +849,11 @@ The frontend gate judges an artifact, so build the snapshot the way a deploy
 does, serve it, and read the API base back out of the served bundles:
 
 ```bash
-PALOPTION_API_URL=https://<api-host> npm run deploy:snapshot
-npx http-server deploy/paloption -p 4181 -c-1 --silent &
+STRATEGYOPTION_API_URL=https://<api-host> npm run deploy:snapshot
+npx http-server deploy/strategyoption -p 4181 -c-1 --silent &
 SRV=$!
 npm run verify:frontend -- --url http://127.0.0.1:4181 \
-  --expect-api https://<api-host> --no-api-health --expect-build deploy/paloption
+  --expect-api https://<api-host> --no-api-health --expect-build deploy/strategyoption
 STATUS=$?
 kill $SRV
 echo "frontend gate exit=$STATUS"
@@ -716,11 +885,17 @@ git push origin main
 | What you see | What it means | What to do |
 | --- | --- | --- |
 | `remote: Invalid username or token. Password authentication is not supported for Git operations.` then `fatal: Authentication failed` | The store handed back a token GitHub no longer accepts — expired or revoked | rotate: the `reject` / `approve` pair above |
-| `remote: Permission to justcallmedavy-art/paloption.git denied to <user>` | The token is real but cannot write here: wrong repository selected, or read-only | check **Repository access** and **Contents: Read and write** on the token |
+| `remote: Permission to justcallmedavy-art/strategyoption.git denied to <user>` | The token is real but cannot write here: wrong repository selected, or read-only | check **Repository access** and **Contents: Read and write** on the token |
 | `fatal: could not read Username for 'https://github.com'` | No credential stored, and nothing can prompt for one | store one as above |
 | `! [remote rejected] main -> main (refusing to allow a Personal Access Token to create or update workflow .github/workflows/ci.yml without workflow scope)` | The push reached GitHub and was refused because the commit touches `.github/workflows/`, and the credential may not edit workflows | use the fine-grained token with **Workflows: Read and write**, or add the `workflow` scope to a classic one |
 | `! [rejected] main -> main (fetch first)` or `(non-fast-forward)` | The remote moved — another machine, or a merge done in the web UI | `git fetch origin`, re-apply the work on top of `origin/main`, push again |
 | `remote: error: GH013: Repository rule violations found` / `protected branch` | Branch protection wants a pull request | push a branch and open a PR; do not weaken the rule to make one push land |
+| `refused, nothing was pushed` and `the push changes .github/workflows/…` | The outgoing commits change a workflow file and no reason was given | `STRATEGYOPTION_WORKFLOW_PUSH_REASON="<why>" git push`; see "The push guard" above |
+| `the push guard could not decide` | A question the guard needs answered failed — a hook line it could not read, a commit it could not open — so nothing was checked and nothing was allowed | run `git fetch origin` and retry; `git push --no-verify` if you mean to skip it |
+| `npm run guard:audit` lists a record as *malformed* or *incomplete* | A line in `.git/strategyoption-push-guard.log` is not one the writer produces: edited, truncated, or a write that stopped mid-line | read the line `--audit` prints verbatim; `--check` exits 1 until it is dealt with, and removing that line (or the whole file) is safe — nothing reads the trail to decide anything |
+| `guard:audit` reports *the remote value carries userinfo* | A record was written before the writer redacted the destination, so it holds what may be a credential | `--check` fails on it and prints the value redacted; remove that line. The reader reports a credential in the trail, it does not scrub one |
+| `guard:audit` shows `records: none` although a push was refused | Expected: a refusal is printed when it happens and is not written to the trail | nothing to fix; the trail records authorisations, not attempts |
+| `guard:audit` shows `authorised 0` where you expect records | The trail is per checkout — a clone or another machine has its own `.git` and its own file | read the trail in the checkout that pushed, or point `STRATEGYOPTION_PUSH_GUARD_LOG` at a copy of that file |
 | CI red where the same commands passed locally | The runner starts from a clone and the lockfile: no `dist/`, no `.data/`, no `deploy/`, nothing already built | read the failing step's output — the usual cause is a command that only works where something was built before it |
 | `frontend-live` reports *skipped* | Working as intended: the two production variables are unset | set `PRODUCTION_FRONTEND_URL` and `PRODUCTION_API_URL` once a deployment exists (§5) |
 
@@ -729,11 +904,70 @@ proves nothing, because it is public — `git ls-remote origin` succeeds with no
 credential at all. The write probe that does answer the question creates nothing:
 
 ```bash
-git push --dry-run origin HEAD:refs/heads/paloption-credential-check
-# * [new branch]      HEAD -> paloption-credential-check
+git push --dry-run origin HEAD:refs/heads/strategyoption-credential-check
+# * [new branch]      HEAD -> strategyoption-credential-check
 ```
 
 `--dry-run` negotiates with GitHub, so a refused or bogus token fails right there
 with exit 128, yet the ref is never created —
-`https://github.com/justcallmedavy-art/paloption/branches` stays unchanged. It is
+`https://github.com/justcallmedavy-art/strategyoption/branches` stays unchanged. It is
 the cheapest way to tell a stale credential from a stale remote.
+
+## 11. Running the split deployment from this machine (temporary)
+
+This is the shape the live site is in today, and it is the one that broke on
+2026-10-18: the Vercel frontend was pointed at a Cloudflare *quick* tunnel whose
+hostname had died, so every sign-in answered `Failed to fetch` — which reads like
+a wrong password, and was reported as a lost account. It was neither. The accounts
+were in Postgres the whole time.
+
+A quick tunnel is fine for a demo and wrong for anything you expect to survive the
+night. Use the Railway or Render routes in §2, with a real `DATABASE_URL`, for
+anything that has to stay up.
+
+```bash
+# 1. the ledger — a real database, not the in-process Map. Without DATABASE_URL
+#    the API still serves, and every account is gone after the next restart.
+node tools/pg-local.mjs start
+export DATABASE_URL="postgresql://postgres@127.0.0.1:55432/strategyoption_test"
+npm run migrate
+
+# 2. the API, with the frontend's origin allowed to call it
+set -a && . ./.env.local && set +a
+export ALLOWED_ORIGINS="https://strategyoption.vercel.app"
+nohup node tools/server.mjs 4174 > .logs/api.log 2>&1 &
+
+# 3. expose it. The hostname changes on every start, which is why step 4 exists.
+./.tools/cloudflared.exe tunnel --url http://127.0.0.1:4174 --no-autoupdate \
+  > .logs/tunnel.log 2>&1 &
+grep -o "https://[a-z0-9-]*\.trycloudflare\.com" .logs/tunnel.log | head -1
+
+# 4. rebuild the frontend against that hostname and publish it
+STRATEGYOPTION_API_URL="https://<the-tunnel-host>" \
+STRATEGYOPTION_PAYMENTS_ENV=sandbox \
+  npm run deploy:prod
+```
+
+Then check the three things that decide whether sign-in can work at all:
+
+```bash
+curl -s "$API/healthz"                                  # {"ok":true,"storage":"postgres"}
+curl -s -o /dev/null -w '%{http_code}\n' "$API/api/auth/login" -X POST \
+  -H 'Content-Type: application/json' -d '{}'           # 401, i.e. reachable
+curl -s "$API/api/auth/login" -X POST -H 'Origin: https://strategyoption.vercel.app' \
+  -H 'Content-Type: application/json' -d '{}' -D - -o /dev/null | grep -i allow-origin
+```
+
+`"storage":"memory"` in the first answer means step 1 was skipped: accounts will
+look fine until the API restarts and then be gone. A 000 or a hang on the second
+means the tunnel (step 3) is down, or the hostname baked into the frontend in
+step 4 is not the one the tunnel is actually serving.
+
+The sign-in page now says which of those it is. An unreachable API reports itself
+and states that nothing was changed, instead of the browser's "Failed to fetch";
+the address used last is remembered and pre-filled after a sign-out. Neither
+touches the account, which no endpoint can delete — signing out removes a token
+from localStorage and nothing else.
+
+`DARAJA_CALLBACK_URL` in `.env.local` carries the tunnel hostname too, so it has
+to be updated with it (§4) or sandbox callbacks stop arriving.

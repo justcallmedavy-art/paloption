@@ -158,7 +158,7 @@ describe("the Daraja client", () => {
       amount: 1300,
       msisdn: "254708374149",
       accountReference: "PAL_till",
-      description: "PalOption deposit",
+      description: "StrategyOption deposit",
       callbackUrl: "https://example.test/cb",
     });
 

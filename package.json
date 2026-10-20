@@ -1,8 +1,8 @@
 {
-  "name": "paloption-clone",
+  "name": "strategyoption-clone",
   "version": "1.0.0",
   "private": true,
-  "description": "Static clone of the PalOption landing page (paloptions.com)",
+  "description": "Static clone of the StrategyOption landing page (strategyoptions.com)",
   "scripts": {
     "build": "tailwindcss -i ./src/input.css -o ./dist/styles.css --minify",
     "dev": "tailwindcss -i ./src/input.css -o ./dist/styles.css --watch",
@@ -21,11 +21,16 @@
     "verify:deploy": "node tools/verify-deploy.mjs",
     "verify:frontend": "node tools/verify-frontend.mjs",
     "verify:credential": "node tools/verify-credential.mjs",
+    "guard:push": "node tools/guard-push.mjs --explain",
+    "guard:install": "node tools/guard-push.mjs --install",
+    "guard:uninstall": "node tools/guard-push.mjs --uninstall",
+    "guard:status": "node tools/guard-push.mjs --status",
+    "guard:audit": "node tools/guard-push.mjs --audit",
     "deploy:snapshot": "npm run build && node tools/prepare-deploy.mjs",
     "deploy:api": "node tools/prepare-api.mjs",
     "deploy:api:check": "node tools/prepare-api.mjs --check",
-    "deploy:preview": "node tools/prepare-deploy.mjs && npx vercel deploy deploy/paloption",
-    "deploy:prod": "node tools/prepare-deploy.mjs && npx vercel deploy deploy/paloption --prod"
+    "deploy:preview": "node tools/prepare-deploy.mjs && npx vercel deploy deploy/strategyoption",
+    "deploy:prod": "node tools/prepare-deploy.mjs && npx vercel deploy deploy/strategyoption --prod"
   },
   "devDependencies": {
     "http-server": "^14.1.1",

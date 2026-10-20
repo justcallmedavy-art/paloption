@@ -1,4 +1,4 @@
--- PalOption ledger schema.
+-- StrategyOption ledger schema.
 --
 -- Applied automatically at boot by tools/store.mjs (idempotent), and also
 -- usable by hand:  psql "$DATABASE_URL" -f tools/schema.sql
@@ -88,6 +88,10 @@ CREATE TABLE IF NOT EXISTS transactions (
   reference  text,
   is_demo    boolean NOT NULL DEFAULT false,
   status     text NOT NULL DEFAULT 'completed',
+  -- The balance this entry left behind, so a history row explains itself
+  -- instead of requiring every earlier row to be replayed. A settled loss
+  -- records the unchanged balance: the stake moved at open, not at close.
+  balance_after numeric(14,2),
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS transactions_user_id_created_at_idx ON transactions (user_id, created_at DESC);
@@ -96,12 +100,23 @@ CREATE INDEX IF NOT EXISTS transactions_user_id_created_at_idx ON transactions (
 CREATE UNIQUE INDEX IF NOT EXISTS transactions_deposit_reference_unique
   ON transactions (reference)
   WHERE type = 'deposit' AND reference IS NOT NULL;
+-- Added after the first release, so an existing ledger gets it too.
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS balance_after numeric(14,2);
 
 CREATE TABLE IF NOT EXISTS deposits (
   id                   text PRIMARY KEY,
   user_id              text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   reference            text NOT NULL UNIQUE,
   method               text NOT NULL,
+  -- Which provider environment created this intent: 'sandbox' or 'production'
+  -- for M-Pesa, NULL for a method that has none. Stamped at intent time, so a
+  -- test deposit cannot later be mistaken for money that actually moved.
+  environment          text,
+  -- The number the prompt was sent to, masked: 2547****678. Never the full
+  -- MSISDN. A deposit that failed at the provider is otherwise unanswerable —
+  -- "which number did this go to?" is the first question, and on 2026-10-18 it
+  -- could not be answered at all because nothing recorded it.
+  msisdn_masked        text,
   amount               numeric(14,2) NOT NULL,
   currency             text NOT NULL DEFAULT 'USD',
   usd_amount           numeric(14,2) NOT NULL,
@@ -138,6 +153,11 @@ ALTER TABLE deposits ADD COLUMN IF NOT EXISTS recon_attempts     integer NOT NUL
 ALTER TABLE deposits ADD COLUMN IF NOT EXISTS last_reconciled_at timestamptz;
 ALTER TABLE deposits ADD COLUMN IF NOT EXISTS next_reconcile_at  timestamptz;
 ALTER TABLE deposits ADD COLUMN IF NOT EXISTS recon_outcome      text;
+ALTER TABLE deposits ADD COLUMN IF NOT EXISTS environment        text;
+ALTER TABLE deposits ADD COLUMN IF NOT EXISTS msisdn_masked      text;
+-- Rows written before this column existed keep NULL rather than being guessed
+-- at: which environment produced them is not recoverable from the row.
+CREATE INDEX IF NOT EXISTS deposits_environment_idx ON deposits (environment, created_at DESC);
 
 -- The reconciliation scan asks one question — "which pending M-Pesa deposits
 -- are due?" — so it gets one partial index rather than a table walk on every

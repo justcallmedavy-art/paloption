@@ -53,7 +53,7 @@ const LOG_PATH = join(ROOT, ".data", "pg.log");
 const PORT = Number(process.env.PG_LOCAL_PORT || 55432);
 const HOST = "127.0.0.1";
 /** The database the suites create their own throwaway schemas inside. */
-const TEST_DB = process.env.PG_LOCAL_DB || "paloption_test";
+const TEST_DB = process.env.PG_LOCAL_DB || "strategyoption_test";
 /** Binaries published per version; the default is the current stable line. */
 const PG_VERSION = process.env.PG_LOCAL_VERSION || "16.4.0";
 /**
@@ -74,7 +74,7 @@ const NON_WINDOWS = [
   "",
   "Use a container or a server you already have, and point the suites at it:",
   "  docker run --rm -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16",
-  "  PG_TEST_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/paloption_test' \\",
+  "  PG_TEST_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/strategyoption_test' \\",
   "    npm run test:postgres",
   "",
   'See PAYMENTS.md, "A PostgreSQL for the suites".',

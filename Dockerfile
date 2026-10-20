@@ -1,7 +1,7 @@
 # For hosts that want a container instead of a buildpack (Fly, Cloud Run, a VPS).
 #
-#   docker build -t paloption-api .
-#   docker run -p 8080:8080 -e DATABASE_URL=... -e ALLOWED_ORIGINS=... paloption-api
+#   docker build -t strategyoption-api .
+#   docker run -p 8080:8080 -e DATABASE_URL=... -e ALLOWED_ORIGINS=... strategyoption-api
 #
 # Only the production dependency (`pg`) is installed; the server has no other
 # runtime dependency, and the test and Tailwind toolchains are dev-only.

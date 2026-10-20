@@ -6,7 +6,7 @@
 # know are left as `sync: false`, which means "ask me in the dashboard":
 #
 #   ALLOWED_ORIGINS         a frontend origin other than this service, e.g.
-#                           https://paloption.vercel.app (no trailing slash)
+#                           https://strategyoption.vercel.app (no trailing slash)
 #   DARAJA_* credentials    your Daraja app's consumer key/secret/passkey
 #   DARAJA_CALLBACK_URL     filled in after the first deploy — the URL contains
 #                           this service's own host, which does not exist yet.
@@ -32,7 +32,7 @@
 # `starter` (web) and `basic-256mb` (database). Nothing else needs to change.
 services:
   - type: web
-    name: paloption-api
+    name: strategyoption-api
     runtime: node
     plan: free
     region: oregon
@@ -45,7 +45,7 @@ services:
         value: production
       - key: DATABASE_URL
         fromDatabase:
-          name: paloption-db
+          name: strategyoption-db
           property: connectionString
       # Leave this EMPTY for the single-origin deployment: this service serves
       # the client itself (site/ is in the repository), so the browser's
@@ -54,9 +54,20 @@ services:
       # whose host matches the Host the request arrived on.
       #
       # Set it only when the client stays on a different host, e.g.
-      # https://paloption.vercel.app, or that host's requests are refused with
+      # https://strategyoption.vercel.app, or that host's requests are refused with
       # ORIGIN_NOT_ALLOWED.
       - key: ALLOWED_ORIGINS
+        sync: false
+
+      # The dedicated account, created at boot (tools/server.mjs). A free plan has
+      # no shell and a brand-new database has no rows, so this is the only place
+      # the account can come from. The server creates it through the ordinary
+      # scrypt path and leaves an existing account alone, so a redeploy cannot
+      # reset a balance. The password is typed into Render's dashboard as a
+      # secret: it is never in this file, the client, or a log line.
+      - key: DEDICATED_ACCOUNT_EMAIL
+        sync: false
+      - key: DEDICATED_ACCOUNT_PASSWORD
         sync: false
 
       # The USDT (TRC20) wallet depositors are told to send to. THIS ONE MOVES
@@ -133,6 +144,6 @@ services:
         sync: false
 
 databases:
-  - name: paloption-db
+  - name: strategyoption-db
     plan: free
     postgresMajorVersion: "16"

@@ -202,7 +202,7 @@ function scriptFor(map) {
 
 /* --------------------------------- suite --------------------------------- */
 
-const SCHEMA = `paloption_stress_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+const SCHEMA = `strategyoption_stress_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
 const TOKEN = "stress_callback_token";
 /** The brief's list of scenarios, collected for the closing table. */
 const EVIDENCE = [];

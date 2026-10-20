@@ -147,7 +147,8 @@ allowed to just credit a `ResultCode: 0`:
 |---|---|---|
 | `ResultCode: 0` **with** receipt and amount | Settled, credited once | The same verification a callback gets |
 | `ResultCode: 0`, **no** metadata | `recon_outcome='paid_pending_receipt'`, stays `pending`, logged as a warning | The money moved, but there is nothing to verify against — crediting here would pay out on a claim |
-| Non-zero `ResultCode` | Failed through the **guarded** transition, nothing credited | Provider-confirmed no payment |
+| Non-zero `ResultCode` — *except* an in-progress one (below) | Failed through the **guarded** transition, nothing credited | Provider-confirmed no payment |
+| `ResultCode: 4999`, "The transaction is still under processing" | Left `pending` and retried | **Not decided yet.** Measured live on 2026-10-17: the sandbox query answers exactly this for a deposit whose callback has not arrived. Reading it as a failure would fail an intent the customer may still be approving — and a failed deposit can never be settled, so their real payment would be refused by `settleDeposit` and never credited. The same state is recognised by its description when the code differs |
 | Timeout, network error, `errorCode`, malformed body, mismatched `CheckoutRequestID`, non-zero `ResponseCode` | Left `pending`, retried with backoff | Inconclusive is not failure |
 | Settlement refused (wrong amount or currency) | `recon_outcome='needs_review'`, nothing credited | Retrying would not change it; a human should look |
 
@@ -221,7 +222,7 @@ due without contacting anyone:
 ```bash
 DATABASE_URL=postgres://... node tools/reconcile-deposits.mjs --dry-run
 DATABASE_URL=postgres://... node tools/reconcile-deposits.mjs --once
-DATABASE_URL=postgres://... node tools/reconcile-deposits.mjs --reference PAL_abc123
+DATABASE_URL=postgres://... node tools/reconcile-deposits.mjs --reference STO_abc123
 DATABASE_URL=postgres://... node tools/reconcile-deposits.mjs --watch
 ```
 

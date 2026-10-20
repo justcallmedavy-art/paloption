@@ -18,7 +18,7 @@
  * bytes. That matters for the raster brand marks in particular, whose pixel pass
  * is not a fixed point and would drift if it read its own output.
  *
- * Usage: node tools/prepare-deploy.mjs [--out deploy/paloption] [--check]
+ * Usage: node tools/prepare-deploy.mjs [--out deploy/strategyoption] [--check]
  *   --check   build to a temporary directory and report any difference against
  *             the existing snapshot, writing nothing (exit 1 if it differs)
  */
@@ -35,12 +35,13 @@ import {
   patchClientChunk,
   fixUnparseableErrorMessages,
   apiBaseFromEnv,
+  injectPaymentsEnvironmentBanner,
 } from "./client-patches.mjs";
 
 const argv = process.argv.slice(2);
 const check = argv.includes("--check");
 const outFlag = argv.indexOf("--out");
-const outArg = outFlag === -1 ? "deploy/paloption" : argv[outFlag + 1];
+const outArg = outFlag === -1 ? "deploy/strategyoption" : argv[outFlag + 1];
 if (!outArg || outArg === "--check") {
   console.error("usage: node tools/prepare-deploy.mjs [--out <dir>] [--check]");
   process.exit(2);
@@ -49,6 +50,20 @@ const outDir = resolve(outArg);
 
 const MIRROR = resolve("site");
 const apiBase = apiBaseFromEnv();
+
+/*
+ * The payment environment this snapshot is wired to, if the caller named one.
+ * It is not inferred from the API base: a deployment can point at an API whose
+ * Daraja settings are unknown to the build, and guessing would be worse than
+ * saying nothing. An unrecognised value is a usage error rather than a silently
+ * unlabelled snapshot.
+ */
+const paymentsEnv = (process.env.STRATEGYOPTION_PAYMENTS_ENV || "").trim().toLowerCase();
+if (paymentsEnv && paymentsEnv !== "sandbox" && paymentsEnv !== "production") {
+  console.error(`STRATEGYOPTION_PAYMENTS_ENV="${paymentsEnv}" is neither sandbox nor production`);
+  console.error("Unset it to build an unlabelled snapshot, or set it to the environment the API is really using.");
+  process.exit(2);
+}
 
 /** The landing page's files, and where each comes from. */
 const LANDING = [
@@ -113,7 +128,7 @@ async function transform(absSource, outRel) {
     applied.push(...patched.applied);
     skipped.push(...patched.skipped);
   }
-  // Points the frontend at the API host. With PALOPTION_API_URL unset the client
+  // Points the frontend at the API host. With STRATEGYOPTION_API_URL unset the client
   // stays same-origin, which is what a single-host deployment wants.
   let apiEdits = 0;
   if (apiPatchable) {
@@ -130,10 +145,18 @@ async function transform(absSource, outRel) {
     errorEdits = patched.count;
     skipped.push(...patched.skipped);
   }
-  return { buffer: Buffer.from(source), edits, applied, skipped, apiEdits, errorEdits };
+  // A visible label of the payment environment, when the build was told one.
+  let labelled = false;
+  if (paymentsEnv && (ext === ".html" || ext === ".htm")) {
+    const labelledPage = injectPaymentsEnvironmentBanner(source, paymentsEnv);
+    source = labelledPage.html;
+    labelled = labelledPage.injected;
+    if (!labelled) skipped.push(`payment-environment label: ${labelledPage.reason}`);
+  }
+  return { buffer: Buffer.from(source), edits, applied, skipped, apiEdits, errorEdits, labelled };
 }
 
-const staging = join(tmpdir(), `paloption-snapshot-${process.pid}`);
+const staging = join(tmpdir(), `strategyoption-snapshot-${process.pid}`);
 await rm(staging, { recursive: true, force: true });
 await mkdir(staging, { recursive: true });
 
@@ -142,6 +165,7 @@ let totalColourEdits = 0;
 let totalPatchEdits = 0;
 let totalRepainted = 0;
 let totalApiEdits = 0;
+let totalLabelled = 0;
 
 async function emit(absSource, outRel) {
   const result = await transform(absSource, outRel);
@@ -154,6 +178,7 @@ async function emit(absSource, outRel) {
     totalColourEdits += result.edits ?? 0;
     totalPatchEdits += (result.applied ?? []).length;
     totalApiEdits += result.apiEdits ?? 0;
+    if (result.labelled) totalLabelled += 1;
     if (result.note) totalRepainted += 1;
     for (const note of result.skipped ?? []) console.warn(`[client-patch] SKIPPED ${outRel}: ${note}`);
   }
@@ -184,7 +209,10 @@ for (const [from, to] of LANDING) {
 await writeFile(join(staging, "vercel.json"), VERCEL_JSON);
 files += 1;
 
-const summary = `${files} file(s), ${totalColourEdits} colour value(s) remapped, ${totalPatchEdits} client edit(s), ${totalRepainted} mark(s) repainted, API base -> ${apiBase || "same-origin"} in ${totalApiEdits} chunk(s)`;
+const summary =
+  `${files} file(s), ${totalColourEdits} colour value(s) remapped, ${totalPatchEdits} client edit(s), ` +
+  `${totalRepainted} mark(s) repainted, API base -> ${apiBase || "same-origin"} in ${totalApiEdits} chunk(s)` +
+  (paymentsEnv ? `, payments labelled ${paymentsEnv} on ${totalLabelled} page(s)` : "");
 
 if (check) {
   const diffs = [];

@@ -197,7 +197,7 @@ export function createDarajaClient({
       PartyB: partyB || shortcode,
       PhoneNumber: msisdn,
       CallBackURL: callbackUrl,
-      AccountReference: String(accountReference || "PalOption").slice(0, ACCOUNT_REFERENCE_MAX),
+      AccountReference: String(accountReference || "StrategyOption").slice(0, ACCOUNT_REFERENCE_MAX),
       TransactionDesc: String(description || "Deposit").slice(0, DESCRIPTION_MAX),
     };
 

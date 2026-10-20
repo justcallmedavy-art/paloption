@@ -122,7 +122,7 @@ describe("the Even/Odd buttons place one trade, not a bot", () => {
   test("the patched chunk still parses", async () => {
     const [chunk] = await findPanelChunks();
     const { source } = patchClientChunk(chunk.file.split(/[\\/]/).pop(), chunk.source);
-    const dir = await mkdtemp(join(tmpdir(), "paloption-mode-"));
+    const dir = await mkdtemp(join(tmpdir(), "strategyoption-mode-"));
     try {
       const file = join(dir, "chunk.mjs");
       await writeFile(file, source);

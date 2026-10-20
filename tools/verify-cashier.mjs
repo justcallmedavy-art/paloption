@@ -70,7 +70,7 @@ if (!argv.includes("--sandbox")) {
 }
 
 const cfg = paymentConfig();
-const API = String(flag("api", process.env.PALOPTION_API_URL || "http://127.0.0.1:4174")).replace(/\/+$/, "");
+const API = String(flag("api", process.env.STRATEGYOPTION_API_URL || "http://127.0.0.1:4174")).replace(/\/+$/, "");
 const TOKEN = String(flag("token", process.env.DARAJA_CALLBACK_TOKEN || "")).trim();
 const CALLBACK_BASE = String(
   flag("callback", (cfg.daraja.callbackUrl || "").replace(/\/api\/auth\/mpesa\/callback\/.*$/, "") || API)

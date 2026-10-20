@@ -156,7 +156,7 @@ const balanceOf = async (store, userId) => Number((await store.findUserById(user
 
 /* ------------------------------- suite ------------------------------- */
 
-const SCHEMA = `paloption_test_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+const SCHEMA = `strategyoption_test_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
 
 describe("PostgreSQL settlement guarantees", () => {
   let store;

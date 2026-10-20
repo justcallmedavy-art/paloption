@@ -2,7 +2,7 @@
 /**
  * The §5 checklist in DEPLOY.md, as one command.
  *
- *   node tools/verify-deploy.mjs --url https://paloption-api.onrender.com
+ *   node tools/verify-deploy.mjs --url https://strategyoption-api.onrender.com
  *   node tools/verify-deploy.mjs --url https://<host> --register
  *
  * A deployment is easy to declare healthy on the strength of one 200, so this
@@ -49,7 +49,7 @@ if (flag("help") || !argv.length) {
 const urlIndex = argv.indexOf("--url");
 const target = urlIndex === -1 ? null : argv[urlIndex + 1];
 if (!target || !/^https?:\/\//.test(target)) {
-  console.error("--url must be an http(s) origin, e.g. --url https://paloption-api.onrender.com");
+  console.error("--url must be an http(s) origin, e.g. --url https://strategyoption-api.onrender.com");
   process.exit(1);
 }
 
@@ -310,7 +310,7 @@ await check("the service answers at all", async () => {
     return record(
       "the service answers at all",
       "fail",
-      `${BASE}/healthz returned ${res.status} ${brief(res.text)} — this is not the PalOption service, or it has not deployed`
+      `${BASE}/healthz returned ${res.status} ${brief(res.text)} — this is not the StrategyOption service, or it has not deployed`
     );
   }
   serviceAlive = true;

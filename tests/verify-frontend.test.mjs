@@ -3,7 +3,7 @@
  *
  * A checker earns its keep in two directions, so both are covered here: it must
  * PASS a correct deployment, and it must FAIL the ways a frontend silently loses
- * its backend — a snapshot built without PALOPTION_API_URL (the bundles then call
+ * its backend — a snapshot built without STRATEGYOPTION_API_URL (the bundles then call
  * the frontend's own host), a snapshot built during a rehearsal and shipped with
  * a loopback base, and a bundle that predates the wss upgrade.
  *
@@ -23,13 +23,13 @@ import { apiBasesIn, socketFollowsApi, isRehearsalBase, assessFrontend, resolveR
 
 /** What tools/client-patches.mjs writes into a chunk, with `base` baked in. */
 const patched = (base) =>
-  `},74728,e=>{"use strict";let t="${base}";let U=()=>globalThis.__PALOPTION_API_URL__||t;e.s(["getApiUrl",0,()=>U(),"getWsUrl",0,()=>{let e=U().replace(/^http/,"ws");"https:"===location.protocol&&"ws:"===e.substr(0,3)&&0>e.indexOf("ws://localhost")&&0>e.indexOf("ws://127.0.0.1")&&(e="wss:"+e.substr(3));return\`\${e}/ws\`}])},75254,e=>{`;
+  `},74728,e=>{"use strict";let t="${base}";let U=()=>globalThis.__STRATEGYOPTION_API_URL__||t;e.s(["getApiUrl",0,()=>U(),"getWsUrl",0,()=>{let e=U().replace(/^http/,"ws");"https:"===location.protocol&&"ws:"===e.substr(0,3)&&0>e.indexOf("ws://localhost")&&0>e.indexOf("ws://127.0.0.1")&&(e="wss:"+e.substr(3));return\`\${e}/ws\`}])},75254,e=>{`;
 
 /** The upstream module, before the patch: no override, no wss upgrade. */
 const upstream = (base) =>
   `},74728,e=>{"use strict";let t="${base}";e.s(["getApiUrl",0,()=>t,"getWsUrl",0,()=>{let e=t.replace(/^http/,"ws");return\`\${e}/ws\`}])},75254,e=>{`;
 
-const PROD = "https://paloption-api.onrender.com";
+const PROD = "https://strategyoption-api.onrender.com";
 
 const passes = (checks) => checks.filter((c) => c.status === "pass");
 const failures = (checks) => checks.filter((c) => c.status === "fail");
@@ -43,8 +43,8 @@ describe("following a redirect", () => {
   });
 
   test("an absolute and a protocol-relative target both resolve", () => {
-    assert.equal(resolveRedirect("https://paloption.vercel.app/trade", "https://paloption.vercel.app/login"), "https://paloption.vercel.app/login");
-    assert.equal(resolveRedirect("https://paloption.vercel.app/trade", "//www.example.com/trade"), "https://www.example.com/trade");
+    assert.equal(resolveRedirect("https://strategyoption.vercel.app/trade", "https://strategyoption.vercel.app/login"), "https://strategyoption.vercel.app/login");
+    assert.equal(resolveRedirect("https://strategyoption.vercel.app/trade", "//www.example.com/trade"), "https://www.example.com/trade");
   });
 
   test("a relative target resolves against the request", () => {
@@ -80,7 +80,7 @@ describe("what counts as a rehearsal base", () => {
   });
 
   test("and nothing else", () => {
-    for (const base of [PROD, "https://paloption.vercel.app", "", "http://localhostx.example", "https://api.example.com:443", "https://notlocalhost.example:8799ish"]) {
+    for (const base of [PROD, "https://strategyoption.vercel.app", "", "http://localhostx.example", "https://api.example.com:443", "https://notlocalhost.example:8799ish"]) {
       assert.equal(isRehearsalBase(base), false, base);
     }
   });
@@ -137,7 +137,7 @@ describe("the verdict", () => {
     assert.ok(named(checks, "is live and backed by Postgres").status === "pass");
   });
 
-  test("a snapshot built without PALOPTION_API_URL fails when an API was expected", () => {
+  test("a snapshot built without STRATEGYOPTION_API_URL fails when an API was expected", () => {
     const checks = assessFrontend({ bases: apiBasesIn(patched("")), socketOk: true, expectApi: PROD });
     const mismatch = named(checks, "the API we expect");
     assert.equal(mismatch.status, "fail");

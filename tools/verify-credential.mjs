@@ -336,7 +336,7 @@ async function apiGet(path, token) {
       headers: {
         authorization: `Bearer ${token}`,
         accept: "application/vnd.github+json",
-        "user-agent": "paloption-verify-credential",
+        "user-agent": "strategyoption-verify-credential",
       },
       signal: AbortSignal.timeout(20_000),
     });
@@ -364,7 +364,7 @@ async function apiGet(path, token) {
  * A ref name nothing else will be using. Random rather than fixed so two runs —
  * or two people — cannot delete each other's probe.
  */
-const probeRef = () => `paloption-credential-probe-${randomBytes(4).toString("hex")}`;
+const probeRef = () => `strategyoption-credential-probe-${randomBytes(4).toString("hex")}`;
 
 /**
  * Whether a ref is on the remote: false, true, or null when the question could
@@ -384,7 +384,7 @@ function refExists(remote, ref) {
  * usual — this checkout is shared.
  */
 function probeCommit(workflowPath, message) {
-  const dir = mkdtempSync(join(tmpdir(), "paloption-probe-index-"));
+  const dir = mkdtempSync(join(tmpdir(), "strategyoption-probe-index-"));
   const env = { GIT_INDEX_FILE: join(dir, "index") };
   const original = gitOut(["show", `HEAD:${workflowPath}`]);
   const blob = gitOut(["hash-object", "-w", "--stdin"], {

@@ -155,7 +155,7 @@ describe("the deploy checker", () => {
     const noUrl = await runChecker([]);
     assert.equal(noUrl.code, 1);
 
-    const bad = await runChecker(["--url", "paloption-api.onrender.com"]);
+    const bad = await runChecker(["--url", "strategyoption-api.onrender.com"]);
     assert.equal(bad.code, 1);
     assert.match(bad.err, /must be an http\(s\) origin/);
   });

@@ -58,18 +58,71 @@ export function isTronAddress(value) {
 
 export function config() {
   const env = process.env;
+
+  /*
+   * The payment environment is read once, here, and a value that is neither
+   * `sandbox` nor `production` is an ERROR rather than a quiet default. The old
+   * behaviour coerced it to sandbox — safe in direction, but it also meant a
+   * typo looked like a working sandbox deployment, and an operator who thought
+   * they had enabled production would see nothing wrong in the boot log.
+   * `DARAJA_ENV` unset stays sandbox: that is the documented default, not a
+   * fallback from a value someone did set.
+   */
+  const environmentRaw = String(env.DARAJA_ENV ?? "").trim().toLowerCase();
+  const environment = environmentRaw === "production" ? "production" : "sandbox";
+  const callbackUrl = String(env.DARAJA_CALLBACK_URL || "").trim();
+  const callbackToken = String(env.DARAJA_CALLBACK_TOKEN || "").trim();
+
+  /*
+   * Configuration that cannot work is refused at the point of use, and this is
+   * the list of reasons. Each one would otherwise fail silently in production:
+   *
+   *   - an unknown DARAJA_ENV, which must not be guessed at;
+   *   - a callback URL that is not HTTPS for a public host, because Safaricom
+   *     requires it and a plain-http callback would simply never arrive;
+   *   - a callback URL that does not carry the token path, because the route
+   *     would answer 404 to every result and the deposit would hang pending
+   *     while the customer's money moved.
+   */
+  const problems = [];
+  if (environmentRaw && environmentRaw !== "sandbox" && environmentRaw !== "production") {
+    problems.push(`DARAJA_ENV="${environmentRaw}" is neither sandbox nor production`);
+  }
+  if (callbackUrl) {
+    let parsed = null;
+    try {
+      parsed = new URL(callbackUrl);
+    } catch {
+      problems.push("DARAJA_CALLBACK_URL is not a valid URL");
+    }
+    if (parsed) {
+      const loopback = ["127.0.0.1", "localhost", "::1", "[::1]"].includes(parsed.hostname);
+      if (parsed.protocol !== "https:" && !loopback) {
+        problems.push("DARAJA_CALLBACK_URL must be https on a public host");
+      }
+      if (callbackToken && !parsed.pathname.endsWith(`/api/auth/mpesa/callback/${callbackToken}`)) {
+        problems.push("DARAJA_CALLBACK_URL does not end with /api/auth/mpesa/callback/<DARAJA_CALLBACK_TOKEN>");
+      }
+    }
+  }
+
   return {
     daraja: {
       consumerKey: env.DARAJA_CONSUMER_KEY,
       consumerSecret: env.DARAJA_CONSUMER_SECRET,
       shortcode: env.DARAJA_SHORTCODE,
       passkey: env.DARAJA_PASSKEY,
-      callbackUrl: env.DARAJA_CALLBACK_URL,
+      callbackUrl,
       // The callback is public, so the URL carries an unguessable token. Without
       // one the callback route refuses, rather than accepting unauthenticated
       // POSTs that could credit a wallet.
-      callbackToken: env.DARAJA_CALLBACK_TOKEN,
-      environment: env.DARAJA_ENV === "production" ? "production" : "sandbox",
+      callbackToken,
+      environment,
+      // Kept so the boot log can say what was actually written, not what the
+      // code guessed from it.
+      environmentRaw,
+      // Configuration that cannot work. Empty means nothing was found wrong.
+      problems,
       // An escape hatch for tests and for pointing at a stand-in during a dry
       // run. Unset means the real Safaricom host for the chosen environment.
       baseUrl: env.DARAJA_BASE_URL || null,
@@ -85,8 +138,15 @@ export function config() {
        * A deployment built from this repository that copies its configuration
        * therefore will not take a real payment until someone means it to.
        */
+      get blockedReason() {
+        if (this.problems.length) return this.problems.join("; ");
+        if (this.environment === "production" && env.DARAJA_ALLOW_PRODUCTION !== "1") {
+          return "DARAJA_ENV=production requires DARAJA_ALLOW_PRODUCTION=1";
+        }
+        return null;
+      },
       get blocked() {
-        return this.environment === "production" && env.DARAJA_ALLOW_PRODUCTION !== "1";
+        return this.blockedReason !== null;
       },
       get configured() {
         // A callback URL is part of being configured: without one Daraja cannot
@@ -164,12 +224,12 @@ function safeEqual(a, b) {
 }
 
 /** Credentials are missing, so the deposit cannot be started. */
-function providerNotConfigured(name, requiredEnv) {
+function providerNotConfigured(name, requiredEnv, extra = {}) {
   return new ApiError(
     503,
     "PAYMENT_PROVIDER_NOT_CONFIGURED",
     `${name} is not configured on this server, so the deposit cannot be started.`,
-    { provider: name.toLowerCase(), required_env: requiredEnv }
+    { provider: name.toLowerCase(), required_env: requiredEnv, ...extra }
   );
 }
 
@@ -348,6 +408,59 @@ export function normaliseMsisdn(input) {
     throw badRequest("Enter a valid Kenyan phone number, e.g. 254712345678");
   }
   return digits;
+}
+
+/**
+ * The number a prompt went to, in a form that identifies it without storing it.
+ *
+ * `254712345678` -> `2547****678`. The prefix and the last three digits are what
+ * a person recognises their own line by; the middle is what makes it personal
+ * data. Without this, a deposit that failed at the provider cannot be diagnosed
+ * afterwards — on 2026-10-18 one did, and there was no record of the number at
+ * all, so neither the operator nor the customer could say what had been tried.
+ */
+export function maskMsisdn(input) {
+  const digits = String(input || "").replace(/\D/g, "");
+  // A whole number, or nothing. Masking a fragment would put a string that is
+  // not a phone number into a column a reader will trust as one; the normaliser
+  // admits 12 digits (254 + 9), and E.164 caps at 15, so anything outside that
+  // is a caller bug rather than a number.
+  if (!/^\d{10,15}$/.test(digits)) return null;
+  return `${digits.slice(0, 4)}****${digits.slice(-3)}`;
+}
+
+/**
+ * What a provider result code implies about what to do next.
+ *
+ * The deposit's `failure_reason` stays the provider's own sentence, verbatim: it
+ * is evidence, and rewording it would make the record less true. These hints are
+ * additive, they name no credential, and nothing here can move money.
+ *
+ * The sandbox note appears only for a sandbox deposit. A production deposit must
+ * never be told to try a test number.
+ */
+const MPESA_RESULT_HINTS = {
+  1: "The M-Pesa wallet does not have enough money for this charge.",
+  17: "The M-Pesa account has reached a transaction limit.",
+  1001: "Another M-Pesa transaction on this number is still in progress. Try again in a moment.",
+  1019: "The request expired before it was completed.",
+  1025: "Safaricom could not deliver the prompt to this number.",
+  1032: "The prompt was cancelled on the phone, so nothing was charged.",
+  1037: "The prompt was not answered before it expired, so nothing was charged.",
+  2001: "The M-Pesa PIN was entered incorrectly, so nothing was charged.",
+  9999: "Safaricom could not deliver the prompt to this number.",
+};
+
+const SANDBOX_PUSH_NOTE =
+  " The sandbox only reliably delivers prompts to Safaricom's test number 254708374149; " +
+  "another number can fail exactly this way. Retrying is safe — no money moved.";
+
+export function mpesaResultHint(code, environment = null) {
+  if (code == null) return null;
+  const hint = MPESA_RESULT_HINTS[Number(code)];
+  if (!hint) return null;
+  const pushFailure = Number(code) === 9999 || Number(code) === 1025;
+  return pushFailure && environment === "sandbox" ? hint + SANDBOX_PUSH_NOTE : hint;
 }
 
 /**
@@ -611,8 +724,22 @@ export function createPaymentRoutes({
     settlement_rate: d.settlement_rate ?? null,
     method: d.method,
     status: d.status,
+    // "sandbox" or "production" for an M-Pesa deposit, null for a method that
+    // has no provider environment. A later reader must be able to tell a test
+    // deposit from one that moved money; the wallet itself cannot say.
+    environment: d.environment ?? null,
+    // Where the prompt went, masked. Answers "which number was this?" without
+    // putting a phone number in the response, or in the logs.
+    msisdn_masked: d.msisdn_masked || null,
     provider_reference: d.provider_reference || null,
+    // The provider's result code, so a client can tell a prompt the customer
+    // cancelled (1032) from a failure that needs their attention. It is not a
+    // secret: it is the number Safaricom itself puts in the callback.
+    mpesa_result_code: d.mpesa_result_code == null ? null : Number(d.mpesa_result_code),
     failure_reason: d.failure_reason || null,
+    // Additive guidance for a code we know; null for one we do not. The
+    // provider's own sentence above is never replaced by this.
+    failure_hint: d.status === "completed" ? null : mpesaResultHint(d.mpesa_result_code, d.environment),
     created_at: d.created_at,
     completed_at: d.completed_at || null,
   });
@@ -633,12 +760,14 @@ export function createPaymentRoutes({
    * Records the intent, before the provider is contacted. Nothing here credits
    * anything and nothing here is a payment.
    */
-  async function recordPendingDeposit(user, { method, amountUsd, settlement }) {
+  async function recordPendingDeposit(user, { method, amountUsd, settlement, environment = null, msisdnMasked = null }) {
     const deposit = {
       id: reference("dep"),
       user_id: user.id,
-      reference: reference("PAL"),
+      reference: reference("STO"),
       method,
+      environment,
+      msisdn_masked: msisdnMasked,
       amount: amountUsd,
       currency: "USD",
       usd_amount: amountUsd,
@@ -752,6 +881,19 @@ export function createPaymentRoutes({
       // The wallet is credited in USD. The settlement amount is kept for audit.
       const credit = deposit.usd_amount ?? deposit.amount;
 
+      // Incremented in the database (balance = balance + credit) rather than read
+      // into this process and written back, so a concurrent trade cannot have its
+      // debit overwritten by a stale copy of the balance.
+      //
+      // Credited first, because the ledger row records the balance it produced.
+      // Both statements are inside the caller's transaction, so a duplicate
+      // reference that trips the unique index rolls the credit back with it.
+      const balance = await t.creditBalance({
+        userId: deposit.user_id,
+        balanceKey: "real_balance",
+        amount: credit,
+      });
+
       await t.insertTransaction({
         id: reference("tx"),
         user_id: deposit.user_id,
@@ -761,16 +903,8 @@ export function createPaymentRoutes({
         method: deposit.method,
         reference: deposit.reference,
         status: "completed",
+        balance_after: balance,
         created_at: completedAt,
-      });
-
-      // Incremented in the database (balance = balance + credit) rather than read
-      // into this process and written back, so a concurrent trade cannot have its
-      // debit overwritten by a stale copy of the balance.
-      const balance = await t.creditBalance({
-        userId: deposit.user_id,
-        balanceKey: "real_balance",
-        amount: credit,
       });
 
       const settled = await t.updateDeposit(deposit.id, {
@@ -885,7 +1019,13 @@ export function createPaymentRoutes({
           "Daraja (M-Pesa)",
           // Say which switch is missing when it is the production opt-in, rather
           // than listing credentials that are in fact present.
-          cfg.daraja.blocked ? cfg.daraja.requiredEnv.concat(["DARAJA_ALLOW_PRODUCTION=1"]) : cfg.daraja.requiredEnv
+          cfg.daraja.blocked && cfg.daraja.environment === "production"
+            ? cfg.daraja.requiredEnv.concat(["DARAJA_ALLOW_PRODUCTION=1"])
+            : cfg.daraja.requiredEnv,
+          // The environment is not a secret, and a refusal that does not say
+          // which environment it refused is hard to act on. The *reason* is the
+          // inconsistency itself — never a credential.
+          { environment: cfg.daraja.environment, reason: cfg.daraja.blockedReason || "credentials missing" }
         );
       }
 
@@ -898,6 +1038,12 @@ export function createPaymentRoutes({
       const deposit = await recordPendingDeposit(user, {
         method: "mpesa",
         amountUsd,
+        // Stamped at intent time, from the configuration that is actually in
+        // force. A sandbox deposit must never look like a real one later.
+        environment: cfg.daraja.environment,
+        // Masked at intent time: the full number is sent to Daraja and kept
+        // nowhere. It is what makes a provider failure diagnosable afterwards.
+        msisdnMasked: maskMsisdn(msisdn),
         settlement: { currency: "KES", amount: settlementAmount, rate: rate.rate, rateAt: rate.fetchedAt },
       });
       await rememberKey(user, ctx.body.idempotency_key, deposit);
@@ -910,7 +1056,7 @@ export function createPaymentRoutes({
             currency: "KES",
             msisdn,
             accountReference: deposit.reference,
-            description: "PalOption deposit",
+            description: "StrategyOption deposit",
             callbackUrl: cfg.daraja.callbackUrl,
           }),
           cfg.daraja.timeoutMs,

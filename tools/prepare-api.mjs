@@ -85,7 +85,7 @@ async function* walk(dir) {
 
 const excluded = (rel) => NEVER.some((re) => re.test(basename(rel)));
 
-const staging = join(tmpdir(), `paloption-api-${process.pid}`);
+const staging = join(tmpdir(), `strategyoption-api-${process.pid}`);
 await rm(staging, { recursive: true, force: true });
 await mkdir(staging, { recursive: true });
 

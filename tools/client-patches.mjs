@@ -265,10 +265,135 @@ function fixTradeModeDefault(source) {
   return { source: out, applied, skipped, count };
 }
 
+/* ------------------------------------------------------------------ *
+ * 6. Signing out, and getting back in
+ *
+ * Sign-out in this client is entirely local: the auth provider removes the
+ * `token` key and clears its own state, and no request is made. Nothing about
+ * the account is touched — which is correct, and is also why a sign-out can
+ * never be the reason a later sign-in fails.
+ *
+ * What made it LOOK otherwise is the error the sign-in page shows when the API
+ * host is unreachable. `fetch` rejects with the browser's own words, and the
+ * page prints them verbatim:
+ *
+ *   catch(e){setError(e.message||"Login failed")}   ->  "Failed to fetch"
+ *
+ * Measured on 2026-10-18: the deployed frontend was pointed at a temporary
+ * tunnel that had since died, so every sign-in attempt after a sign-out showed
+ * "Failed to fetch" — indistinguishable, to the person reading it, from a wrong
+ * password or a deleted account. The accounts were in fact all still there.
+ *
+ * Two edits, both in the sign-in page:
+ *
+ *   - an unreachable API is reported as unreachable, and says explicitly that
+ *     nobody's credentials were checked and nothing was changed. The server's
+ *     own message ("Invalid email or password") is still shown verbatim, since
+ *     that is a different, real answer;
+ *   - the address that was used is remembered in localStorage and pre-filled
+ *     next time, so a sign-out never leaves the visitor guessing which address
+ *     they registered with.
+ * ------------------------------------------------------------------ */
+
+const LAST_EMAIL_KEY = "strategyoption:last-email";
+
+/** The banner text for a fetch that never reached a server. */
+export const UNREACHABLE_SIGN_IN_MESSAGE =
+  "Can't reach the StrategyOption server, so this sign-in was not checked and nothing was changed. " +
+  "Your account and balance are safe. Try again in a moment.";
+
+/** Chunks the mirror carries the sign-in page in, so a lost anchor is loud. */
+export const SIGN_IN_CHUNKS = new Set(["5595d28ad44d9db8.js"]);
+
+/**
+ * The sign-in component's first three state hooks — email, password, then the
+ * password's visibility flag — of which only the EMAIL declaration is matched.
+ *
+ * The other two are a lookahead, deliberately. Matching all three and rewriting
+ * them replaced the password state with the email state: `[b,v]=useState("")`
+ * and `[w,j]=useState(!1)` disappeared, the password input rendered `value:b`
+ * against an identifier that no longer existed, and the page died with
+ * `ReferenceError: w is not defined` before anything could be typed. The
+ * lookahead makes the two following declarations a CONDITION for the edit
+ * rather than part of its replacement.
+ */
+const SIGN_IN_STATE =
+  /\[(\w+),(\w+)\]=\(0,(\w+)\.useState\)\(""\)(?=,\[\w+,\w+\]=\(0,\3\.useState\)\(""\),\[\w+,\w+\]=\(0,\3\.useState\)\(!1\))/;
+
+/** `let t=await A(email,password);if(t.requires2FA&&t.tempToken)` */
+const SIGN_IN_SUBMIT = /try\{let (\w+)=await (\w+)\((\w+),(\w+)\);if\(\1\.requires2FA&&\1\.tempToken\)/;
+
+/** `catch(e){setError(e.message||"Login failed")}` */
+const SIGN_IN_CATCH = /catch\((\w+)\)\{(\w+)\((\1\.message\|\|"Login failed")\)\}/;
+
+export function patchSignInRecovery(source, filename = "") {
+  const applied = [];
+  const skipped = [];
+
+  // Only the page that really has the sign-in form is touched: it must carry the
+  // 2FA help text and the login submit idiom, not merely three state hooks.
+  const looksLikeSignIn =
+    source.includes("access your authenticator") && SIGN_IN_SUBMIT.test(source);
+  if (!looksLikeSignIn) {
+    if (SIGN_IN_CHUNKS.has(filename)) {
+      skipped.push(
+        `${filename}: carries the sign-in page in the mirror, but it no longer looks like it (form or submit anchor changed)`
+      );
+    }
+    return { source, applied, skipped, count: 0 };
+  }
+
+  let out = source;
+
+  const catchMatch = SIGN_IN_CATCH.exec(out);
+  if (catchMatch) {
+    const [whole, err, setter, original] = catchMatch;
+    // The server's own words survive; only the browser's untranslated network
+    // complaint is replaced.
+    const replacement =
+      `catch(${err}){var _m=(${err}&&${err}.message)||"";` +
+      `${setter}(/failed to fetch|networkerror|load failed|network request failed|fetch failed|err_connection/i.test(_m)` +
+      `?${JSON.stringify(UNREACHABLE_SIGN_IN_MESSAGE)}:(${err}&&${err}.message)||"Login failed")}`;
+    out = out.replace(whole, replacement);
+    applied.push(`sign-in: an unreachable API reports itself instead of "${original}"`);
+  } else {
+    skipped.push("sign-in: the error handler anchor was not found");
+  }
+
+  const stateMatch = SIGN_IN_STATE.exec(out);
+  if (stateMatch) {
+    const [whole, email, emailSet] = stateMatch;
+    // Re-entering the address is the one thing a sign-out should not cost.
+    const prefilled =
+      `[${email},${emailSet}]=(0,${stateMatch[3]}.useState)((function(){try{return localStorage.getItem(${JSON.stringify(
+        LAST_EMAIL_KEY
+      )})||""}catch(_){return ""}})())`;
+    out = out.replace(whole, prefilled);
+    applied.push("sign-in: the last address used is pre-filled");
+  } else {
+    skipped.push("sign-in: the email field's state anchor was not found");
+  }
+
+  const submitMatch = SIGN_IN_SUBMIT.exec(out);
+  if (submitMatch) {
+    const [whole, result, loginFn, email] = submitMatch;
+    const replacement = `try{let ${result}=await ${loginFn}(${email},${submitMatch[4]});try{localStorage.setItem(${JSON.stringify(
+      LAST_EMAIL_KEY
+    )},${email})}catch(_){}if(${result}.requires2FA&&${result}.tempToken)`;
+    out = out.replace(whole, replacement);
+    applied.push("sign-in: a successful sign-in remembers the address");
+  } else {
+    skipped.push("sign-in: the submit anchor was not found");
+  }
+
+  return { source: out, applied, skipped, count: applied.length };
+}
+
 /** Chunk files this module knows how to fix. */
 export const PATCHABLE_CHUNKS = new Set([
   "219b97e8e5e970d5.js",
   "31fae89f7d7805b5.js",
+  "5595d28ad44d9db8.js",
 ]);
 
 export function isPatchableChunk(filename) {
@@ -297,10 +422,12 @@ export function patchClientChunk(filename, source) {
   const banners = applyBannerEdits(result.source, filename);
   const mode = fixTradeModeDefault(banners.source);
   const socket = patchSocketResilience(mode.source, filename);
+  const deposit = patchDepositOutcome(socket.source, filename);
+  const signIn = patchSignInRecovery(deposit.source, filename);
   return {
-    source: socket.source,
-    applied: [...result.applied, ...banners.applied, ...mode.applied, ...socket.applied],
-    skipped: [...result.skipped, ...banners.skipped, ...mode.skipped, ...socket.skipped],
+    source: signIn.source,
+    applied: [...result.applied, ...banners.applied, ...mode.applied, ...socket.applied, ...deposit.applied, ...signIn.applied],
+    skipped: [...result.skipped, ...banners.skipped, ...mode.skipped, ...socket.skipped, ...deposit.skipped, ...signIn.skipped],
   };
 }
 
@@ -325,9 +452,9 @@ export { fixTradeModeDefault };
  * The replacement keeps same-origin as the default and adds two ways to point
  * it elsewhere, in precedence order:
  *
- *   1. `globalThis.__PALOPTION_API_URL__`, read at call time, so a page can
+ *   1. `globalThis.__STRATEGYOPTION_API_URL__`, read at call time, so a page can
  *      override the base without rebuilding anything;
- *   2. the base baked in here, from PALOPTION_API_URL (VITE_API_URL is accepted
+ *   2. the base baked in here, from STRATEGYOPTION_API_URL (VITE_API_URL is accepted
  *      as an alias, since that is the name the deployment asks for).
  *
  * getWsUrl derives the socket from the same base, so an https base becomes wss
@@ -342,7 +469,7 @@ const API_BASE_FROM =
 const apiBaseTo = (base) =>
   'let t=' +
   JSON.stringify(base || "") +
-  ';let U=()=>globalThis.__PALOPTION_API_URL__||t;' +
+  ';let U=()=>globalThis.__STRATEGYOPTION_API_URL__||t;' +
   'e.s(["getApiUrl",0,()=>U(),"getWsUrl",0,()=>{let e=U().replace(/^http/,"ws");' +
   '"https:"===location.protocol&&"ws:"===e.substr(0,3)&&0>e.indexOf("ws://localhost")&&0>e.indexOf("ws://127.0.0.1")&&(e="wss:"+e.substr(3));' +
   'return`${e}/ws`}])';
@@ -361,7 +488,53 @@ export function patchApiBase(source, base) {
 
 /** The base to bake in, from the environment. Empty means same-origin. */
 export function apiBaseFromEnv(env = process.env) {
-  return (env.PALOPTION_API_URL || env.VITE_API_URL || "").trim().replace(/\/+$/, "");
+  return (env.STRATEGYOPTION_API_URL || env.VITE_API_URL || "").trim().replace(/\/+$/, "");
+}
+
+/* ------------------------------------------------------------------ *
+ * 3b. A visible payment-environment label
+ *
+ * The wallet cannot tell a sandbox deposit from a real one once it is credited:
+ * both are dollars in the same balance. The deposit row now records which
+ * environment created it (`deposits.environment`), but a database column is not
+ * something a visitor sees. This puts the same fact on every static page, so a
+ * deployment that is wired to Safaricom's sandbox says so on screen instead of
+ * leaving it to whoever reads the boot log.
+ *
+ * It is applied at snapshot time, from `STRATEGYOPTION_PAYMENTS_ENV`, and only
+ * when that variable names an environment: a build that does not say gets no
+ * banner rather than a guessed one. The label is fixed, non-interactive and
+ * small, so it cannot be mistaken for part of the cashier.
+ */
+export const PAYMENTS_ENV_LABEL_ID = "strategyoption-payments-environment";
+
+export function paymentsEnvironmentBanner(environment) {
+  const env = String(environment || "").trim().toLowerCase();
+  if (env !== "sandbox" && env !== "production") return null;
+  const live = env === "production";
+  const text = live ? "M-Pesa LIVE — real money" : "M-Pesa sandbox — no real money moves";
+  const background = live ? "#b91c1c" : "#7c2d12";
+  return (
+    `<div id="${PAYMENTS_ENV_LABEL_ID}" role="status" style="` +
+    "position:fixed;left:12px;bottom:12px;z-index:2147483647;pointer-events:none;" +
+    "font:600 12px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;padding:5px 10px;border-radius:999px;" +
+    `background:${background};color:#fff;opacity:.92;box-shadow:0 1px 4px rgba(0,0,0,.35)"` +
+    `>${text}</div>`
+  );
+}
+
+/**
+ * Adds the label before `</body>` in a page. Idempotent, and honest about why it
+ * did nothing: a caller that named an environment should be able to tell a page
+ * that was labelled from one that was skipped.
+ */
+export function injectPaymentsEnvironmentBanner(html, environment) {
+  const banner = paymentsEnvironmentBanner(environment);
+  if (!banner) return { html, injected: false, reason: "no payment environment named" };
+  if (html.includes(`id="${PAYMENTS_ENV_LABEL_ID}"`)) return { html, injected: false, reason: "already labelled" };
+  const at = html.lastIndexOf("</body>");
+  if (at === -1) return { html, injected: false, reason: "no </body> to attach the label to" };
+  return { html: html.slice(0, at) + banner + html.slice(at), injected: true, reason: null };
 }
 
 /* ------------------------------------------------------------------ *
@@ -491,7 +664,7 @@ export function wsRetryDelay(attempt, random = Math.random) {
 
 /** The injected copy of `wsRetryDelay`, defined once per page. */
 const RETRY_DELAY_SRC =
-  `(globalThis.__palOptionRetryDelay||(globalThis.__palOptionRetryDelay=${wsRetryDelay.toString()}))`;
+  `(globalThis.__strategyOptionRetryDelay||(globalThis.__strategyOptionRetryDelay=${wsRetryDelay.toString()}))`;
 
 /**
  * The heartbeat and its watchdog. Written against the chunk's own socket
@@ -499,16 +672,16 @@ const RETRY_DELAY_SRC =
  * pinged must not take the app down, so every step is inside one try/catch.
  */
 const HEARTBEAT_SRC =
-  'globalThis.__palOptionWsSeen=Date.now(),' +
-  's.__palOptionBeat=setInterval(()=>{try{' +
-  'if(Date.now()-(globalThis.__palOptionWsSeen||0)>45e3){s.close();return}' +
+  'globalThis.__strategyOptionWsSeen=Date.now(),' +
+  's.__strategyOptionBeat=setInterval(()=>{try{' +
+  'if(Date.now()-(globalThis.__strategyOptionWsSeen||0)>45e3){s.close();return}' +
   's.readyState===WebSocket.OPEN&&s.send(JSON.stringify({type:"ping"}))' +
   '}catch(_){}},2e4)';
 
 /** The retry, after counting one more failure. */
 const RETRY_DELAY_CALL =
-  '(globalThis.__palOptionWsAttempt=(globalThis.__palOptionWsAttempt||0)+1,' +
-  `${RETRY_DELAY_SRC}(globalThis.__palOptionWsAttempt))`;
+  '(globalThis.__strategyOptionWsAttempt=(globalThis.__strategyOptionWsAttempt||0)+1,' +
+  `${RETRY_DELAY_SRC}(globalThis.__strategyOptionWsAttempt))`;
 
 /**
  * The three edits, each anchored on a string that occurs exactly once in the
@@ -523,18 +696,145 @@ const SOCKET_EDITS = [
   },
   {
     from: 's.onmessage=e=>{try{let t=JSON.parse(e.data);',
-    to: 's.onmessage=e=>{globalThis.__palOptionWsSeen=Date.now(),globalThis.__palOptionWsAttempt=0;try{let t=JSON.parse(e.data);',
+    to: 's.onmessage=e=>{globalThis.__strategyOptionWsSeen=Date.now(),globalThis.__strategyOptionWsAttempt=0;try{let t=JSON.parse(e.data);',
     note: "trading socket: an inbound frame records liveness and clears the backoff",
   },
   {
     from: 't.current=setTimeout(()=>{b()},3e3)',
-    to: `s.__palOptionBeat&&clearInterval(s.__palOptionBeat),t.current=setTimeout(()=>{b()},${RETRY_DELAY_CALL})`,
+    to: `s.__strategyOptionBeat&&clearInterval(s.__strategyOptionBeat),t.current=setTimeout(()=>{b()},${RETRY_DELAY_CALL})`,
     note: "trading socket: the fixed 3s retry becomes exponential backoff with jitter",
   },
 ];
 
 /** Chunks the mirror carries the trading socket in, so a lost anchor is loud. */
 export const SOCKET_CHUNKS = new Set(["219b97e8e5e970d5.js"]);
+
+/* ------------------------------------------------------------------ *
+ * 6. What happened to the deposit
+ *
+ * The M-Pesa handler opens a "Processing Payment" screen and never asks again:
+ *
+ *   if(s.ok) z(!0), c("");
+ *
+ * `z` shows the spinner, `c` clears the error box, and the response body — which
+ * carries the deposit's reference — is thrown away. Nothing polls for the
+ * outcome and the socket carries no deposit message, so the spinner spins until
+ * the visitor closes it. For a deposit that SUCCEEDS the credit arrives through
+ * the balance update, but one that FAILS leaves the visitor looking at
+ * "Check your phone and enter M-Pesa PIN" forever, with no indication that the
+ * prompt was cancelled and no money moved.
+ *
+ * Measured against the live sandbox on 2026-10-17: three real pushes, all
+ * accepted, callbacks at t+6s to t+26s with result 1032/1037, deposit rows
+ * correctly `failed` and the ledger untouched — and the browser still on the
+ * spinner minutes later.
+ *
+ * The replacement keeps the deposit's reference from the response and polls the
+ * deposit-status route the server already exposes, then reports the outcome in a
+ * toast over the page. It reads the API's own `failure_reason`, never invents
+ * one, and stops at a terminal status. If the poll gives up it says so rather
+ * than pretending the payment is still in flight — and it moves no money in any
+ * direction: crediting stays where it belongs, in `settleDeposit`.
+ */
+const DEPOSIT_PUSH_ANCHOR = 'if(s.ok)z(!0),c("");';
+
+/*
+ * The outcome is reported in a toast appended to `document.body` rather than by
+ * rewriting the processing screen's own text.
+ *
+ * That is not a style choice. The first version of this patch set the text of
+ * the "Processing Payment" heading and its paragraphs, and measured in the
+ * browser it did not survive: the page re-renders about once a second (the
+ * socket pushes a new price and balance), React reconciles that subtree against
+ * its own virtual DOM, and the spinner's original text came straight back — the
+ * poll had run, the deposit was `failed`, and the screen still said "Check your
+ * phone and enter M-Pesa PIN". A node React does not own is not reconciled away.
+ */
+const DEPOSIT_POLL_SRC =
+  "(function(){var _ref=_d.deposit&&_d.deposit.reference;if(!_ref)return;" +
+  "var _id=\"strategyoption-deposit-outcome\";var _n=0;" +
+  'function _show(_dep,_giveUp){try{if(document.getElementById(_id))return;' +
+  'var _ok=_dep.status==="completed";var _sandbox=_dep.environment==="sandbox";' +
+  // A prompt the customer cancelled is not a failure. It is what happens when
+  // somebody opens the prompt and declines it, or lets it lapse in the sandbox,
+  // and it is the ordinary outcome of a test against a number the sandbox
+  // simulator cannot reach. Reporting it in the same red banner as a real
+  // failure — with the provider's sentence, a hint, the sandbox note and a
+  // reference — is noise on every single attempt, which is what was reported on
+  // 2026-10-18. It gets one calm line, no button, and it leaves on its own.
+  'var _cancelled=!_ok&&!_giveUp&&Number(_dep.mpesa_result_code)===1032;' +
+  'var _title=_giveUp?"M-Pesa deposit still pending":(_ok?"M-Pesa deposit confirmed":(_cancelled?"M-Pesa deposit cancelled":"M-Pesa deposit failed"));' +
+  'var _body=_giveUp?"No result arrived within six minutes. Open Transactions for the final status; nothing was credited unless it appears there."' +
+  ':(_cancelled?"You cancelled the prompt, so nothing was charged."' +
+  ':((_dep.failure_reason||"The payment was not completed.")+" No money was taken from your account."'+ 
+  // The provider's own sentence stays first; the hint is what to do next, and
+  // is absent whenever the server has none for that result code.
+  '+(_dep.failure_hint?(" "+_dep.failure_hint):"")));' +
+  'var _box=document.createElement("div");_box.id=_id;_box.setAttribute("role","status");' +
+  '_box.setAttribute("data-deposit-reference",_ref);_box.setAttribute("data-deposit-status",_dep.status);' +
+  '_box.setAttribute("data-deposit-cancelled",_cancelled?"1":"0");' +
+  '_box.style.cssText="position:fixed;left:50%;transform:translateX(-50%);bottom:54px;z-index:2147483646;"+' +
+  '"max-width:min(92vw,420px);font:500 13px/1.55 system-ui,-apple-system,Segoe UI,sans-serif;padding:12px 14px;"+' +
+  '"border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.4);color:#fff;background:"+(_ok?"#15803d":(_cancelled?"#334155":"#b91c1c"));' +
+  'var _h=document.createElement("strong");_h.textContent=_title;_h.style.cssText="display:block;font-weight:700;margin-bottom:4px";' +
+  'var _p=document.createElement("p");_p.textContent=_body;_p.style.cssText="margin:0 0 6px;opacity:.95";' +
+  '_box.appendChild(_h);_box.appendChild(_p);' +
+  // The number, the sandbox note, the reference and a Dismiss button belong to a
+  // failure somebody has to act on. A cancellation needs none of them, and it
+  // removes itself after six seconds so it cannot be left sitting on the page.
+  'if(_cancelled){setTimeout(function(){try{_box.remove()}catch(_){}},6e3)}' +
+  'else{var _sm=document.createElement("p");_sm.style.cssText="margin:0;opacity:.8;font-size:12px";' +
+  '_sm.textContent=(_sandbox?"Sandbox deposit — no real money was involved. ":"")+"Reference "+_ref+(_dep.msisdn_masked?(" · sent to "+_dep.msisdn_masked):"")+(_ok&&_dep.provider_reference?(" · receipt "+_dep.provider_reference):"");' +
+  'var _b=document.createElement("button");_b.textContent="Dismiss";_b.style.cssText="margin-top:8px;padding:4px 10px;"+' +
+  '"border-radius:8px;border:1px solid rgba(255,255,255,.4);background:transparent;color:#fff;font:inherit;cursor:pointer";' +
+  '_b.onclick=function(){_box.remove()};_box.appendChild(_sm);_box.appendChild(_b);}' +
+  'document.body.appendChild(_box)}catch(_e){}}' +
+  "var _t=setInterval(async function(){if(++_n>72){clearInterval(_t);" +
+  'var _last={status:"pending",environment:null,failure_reason:null};_show(_last,true);return}' +
+  "try{var _b=await fetch(`\${(0,r.getApiUrl)()}/api/auth/deposits/`+encodeURIComponent(_ref)," +
+  "{headers:{Authorization:\"Bearer \"+localStorage.getItem(\"token\")}});" +
+  "var _j=await _b.json().catch(function(){return{}});var _dep=_j&&_j.deposit;" +
+  'if(!_dep||!_dep.status||_dep.status==="pending")return;clearInterval(_t);_show(_dep,false)}' +
+  'catch(_e){}},5000)})()';
+
+const DEPOSIT_OUTCOME_EDIT = {
+  from: DEPOSIT_PUSH_ANCHOR,
+  to:
+    "if(s.ok){var _d=await s.json().catch(function(){return{}});z(!0);c(\"\");" +
+    DEPOSIT_POLL_SRC +
+    "}",
+  note: "the M-Pesa deposit screen reports the final status instead of spinning forever",
+};
+
+/** Chunks the mirror carries the M-Pesa deposit handler in, so a lost anchor is loud. */
+export const DEPOSIT_CHUNKS = new Set(["219b97e8e5e970d5.js"]);
+
+export function patchDepositOutcome(source, filename = "") {
+  const applied = [];
+  const skipped = [];
+
+  const occurrences = source.split(DEPOSIT_OUTCOME_EDIT.from).length - 1;
+  if (occurrences === 1) {
+    return {
+      source: source.replace(DEPOSIT_OUTCOME_EDIT.from, DEPOSIT_OUTCOME_EDIT.to),
+      applied: [DEPOSIT_OUTCOME_EDIT.note],
+      skipped,
+      count: 1,
+    };
+  }
+
+  if (occurrences > 1) {
+    skipped.push(`${DEPOSIT_OUTCOME_EDIT.note}: its anchor matched ${occurrences} times, expected exactly once`);
+    return { source, applied, skipped, count: 0 };
+  }
+
+  if (DEPOSIT_CHUNKS.has(filename)) {
+    skipped.push(
+      `${filename}: carries the M-Pesa deposit handler in the mirror, but its anchor was not found in this bundle`
+    );
+  }
+  return { source, applied, skipped, count: 0 };
+}
 
 /**
  * Gives the trading socket a heartbeat, a watchdog and a backoff. Safe on any

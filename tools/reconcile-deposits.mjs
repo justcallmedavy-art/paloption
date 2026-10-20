@@ -12,7 +12,7 @@
  * Usage:
  *   DATABASE_URL=postgres://... node tools/reconcile-deposits.mjs --dry-run
  *   DATABASE_URL=postgres://... node tools/reconcile-deposits.mjs --once
- *   DATABASE_URL=postgres://... node tools/reconcile-deposits.mjs --reference PAL_abc123
+ *   DATABASE_URL=postgres://... node tools/reconcile-deposits.mjs --reference STO_abc123
  *   DATABASE_URL=postgres://... node tools/reconcile-deposits.mjs --watch
  *
  * Credentials come from the environment or .env.local, exactly as the server

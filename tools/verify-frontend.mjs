@@ -6,7 +6,7 @@
  * frontend host proves the two are connected, because the only link between them
  * is a value baked into the client's bundles when the snapshot is built:
  *
- *   PALOPTION_API_URL=https://<api-host> npm run deploy:prod
+ *   STRATEGYOPTION_API_URL=https://<api-host> npm run deploy:prod
  *
  * Forget that variable, or set it to a rehearsal server, or leave it pointing at
  * the previous backend, and the site still returns 200 and still renders every
@@ -15,9 +15,9 @@
  * is the failure this checks for, and it is invisible from the outside except by
  * reading what the bundle actually resolves.
  *
- *   node tools/verify-frontend.mjs --url https://paloption.vercel.app
- *   node tools/verify-frontend.mjs --url https://paloption.vercel.app \
- *        --expect-api https://paloption-api.onrender.com
+ *   node tools/verify-frontend.mjs --url https://strategyoption.vercel.app
+ *   node tools/verify-frontend.mjs --url https://strategyoption.vercel.app \
+ *        --expect-api https://strategyoption-api.onrender.com
  *
  * Read-only: it fetches the page, the chunks it references, and — with
  * `--expect-api` — that API's `/healthz`. Exit code 0 only when every check
@@ -51,7 +51,7 @@ import { pathToFileURL } from "node:url";
  */
 export function apiBasesIn(source) {
   const found = [];
-  const patched = /let t="([^"]*)";let U=\(\)=>globalThis\.__PALOPTION_API_URL__\|\|t;e\.s\(\["getApiUrl"/g;
+  const patched = /let t="([^"]*)";let U=\(\)=>globalThis\.__STRATEGYOPTION_API_URL__\|\|t;e\.s\(\["getApiUrl"/g;
   const upstream = /let t="([^"]*)";e\.s\(\["getApiUrl",0,\(\)=>t,"getWsUrl"/g;
   for (const re of [patched, upstream]) {
     for (const match of source.matchAll(re)) found.push({ base: match[1], form: re === patched ? "patched" : "upstream" });
@@ -308,7 +308,7 @@ export async function run(argv = process.argv.slice(2)) {
 
   const target = valueOf("url");
   if (!target || !/^https?:\/\//.test(target)) {
-    console.error("--url must be an http(s) origin, e.g. --url https://paloption.vercel.app");
+    console.error("--url must be an http(s) origin, e.g. --url https://strategyoption.vercel.app");
     return 1;
   }
   const BASE = target.replace(/\/+$/, "");

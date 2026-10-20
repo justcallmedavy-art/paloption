@@ -1,5 +1,5 @@
 /**
- * Mirror paloptions.com into ./site, preserving the original URL paths so that
+ * Mirror strategyoptions.com into ./site, preserving the original URL paths so that
  * absolute references like /_next/static/chunks/x.js keep working offline.
  *
  * Usage:  node tools/mirror.mjs
@@ -13,7 +13,7 @@
 import { mkdir, writeFile, readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-const ORIGIN = "https://paloptions.com";
+const ORIGIN = "https://strategyoptions.com";
 const OUT = "site";
 
 /* Route -> where it lands on disk (directory index so /register/ resolves). */
@@ -40,7 +40,7 @@ const ROUTES = {
 /* Replacements applied to downloaded JavaScript.
    The clone must not reach the real production API or websocket. */
 const REWRITES = [
-  ["https://api.paloption.com", ""],
+  ["https://api.strategyoptions.com", ""],
 ];
 
 const downloaded = new Map(); // url -> local path

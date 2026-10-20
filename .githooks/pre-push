@@ -1,0 +1,43 @@
+#!/bin/sh
+# The push guard's entry point. Git runs this before sending anything, with the
+# refs it is about to push on stdin, the remote's name as $1 and its URL as $2.
+#
+# It is not installed by cloning: git only ever looks at .git/hooks unless
+# core.hooksPath says otherwise, so enable it once per checkout with
+#
+#   npm run guard:install
+#
+# and undo that with `npm run guard:uninstall` (or `git config --unset
+# core.hooksPath`). With no hook the same decision is one command away:
+# `npm run guard:push` says what the guard would do without pushing anything.
+#
+# This script decides nothing itself: it hands the question to
+# tools/guard-push.mjs, whose rules are documented in DEPLOY.md §9. Everything
+# it does here is fail closed — node missing, the tool missing, or the tool
+# failing to decide all refuse the push, because a hook that silently allows
+# what it could not judge is worse than no hook at all.
+set -u
+
+# The repository root, from the hook's own path, using nothing but shell
+# built-ins: this has to work before the PATH it is about to complain about.
+hook_dir=${0%/*}
+[ "$hook_dir" = "$0" ] && hook_dir=.
+root=$(cd "$hook_dir/.." && pwd)
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-push: refusing this push — node is not on PATH, so the workflow guard cannot run." >&2
+  echo "          Node >=20 is what this project's own checks require (package.json)." >&2
+  echo "          To push anyway, deliberately: git push --no-verify" >&2
+  exit 1
+fi
+
+if [ ! -f "$root/tools/guard-push.mjs" ]; then
+  echo "pre-push: refusing this push — $root/tools/guard-push.mjs is missing," >&2
+  echo "          so there is no guard to run and nothing was checked." >&2
+  echo "          To push anyway, deliberately: git push --no-verify" >&2
+  exit 1
+fi
+
+# exec, so git's ref updates on stdin reach the tool untouched and the hook's
+# exit status is the tool's.
+exec node "$root/tools/guard-push.mjs" --hook "${1:-origin}" "${2:-}"

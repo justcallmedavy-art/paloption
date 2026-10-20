@@ -49,7 +49,7 @@
     if (!email || !password) return showError(errorBox, "Please enter your email and password");
 
     busy(submit, label, spinner, true);
-    PalOption.api
+    StrategyOption.api
       .login(email, password)
       .then(function (result) {
         if (result.requires2FA) {
@@ -57,11 +57,11 @@
           credsStep.classList.add("hidden");
           twofaStep.classList.remove("hidden");
           // This build has no authenticator: surface the code so the step is testable.
-          PalOption.toast("Demo verification code: " + result.demoCode, "success");
+          StrategyOption.toast("Demo verification code: " + result.demoCode, "success");
           boxes[0] && boxes[0].focus();
           return;
         }
-        PalOption.toast("Welcome back, " + result.user.username, "success");
+        StrategyOption.toast("Welcome back, " + result.user.username, "success");
         setTimeout(function () { location.href = next; }, 400);
       })
       .catch(function (err) { showError(errorBox, err.message); })
@@ -71,8 +71,8 @@
   /* ---------------- demo account ---------------- */
   document.getElementById("demo-login").addEventListener("click", function () {
     clearError(errorBox);
-    PalOption.api.demo().then(function (result) {
-      PalOption.toast("Demo account ready — $10,000 virtual balance", "success");
+    StrategyOption.api.demo().then(function (result) {
+      StrategyOption.toast("Demo account ready — $10,000 virtual balance", "success");
       setTimeout(function () { location.href = next; }, 400);
     }).catch(function (err) { showError(errorBox, err.message); });
   });
@@ -119,10 +119,10 @@
     if (code.length !== 6) return showError(error2fa, "Please enter all 6 digits");
 
     busy(verify, verifyLabel, verifySpinner, true);
-    PalOption.api
+    StrategyOption.api
       .verify2FA(tempToken, code)
       .then(function () {
-        PalOption.toast("Verified — signing you in", "success");
+        StrategyOption.toast("Verified — signing you in", "success");
         setTimeout(function () { location.href = next; }, 400);
       })
       .catch(function (err) {

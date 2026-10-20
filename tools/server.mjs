@@ -1,5 +1,5 @@
 /**
- * Local server for the mirrored PalOption client.
+ * Local server for the mirrored StrategyOption client.
  *
  * Serves site/ as static files and implements the API the client expects, so
  * signup/login/2FA/trading actually complete instead of failing on a 405 HTML
@@ -65,6 +65,8 @@ import {
 import { recolor } from "./palette.mjs";
 import { recolorIcon } from "./icon-recolor.mjs";
 import { createStore, round2 } from "./store.mjs";
+import { demoWinRateForEmail, settleOutcome } from "./account-rules.mjs";
+import { provisionAccount } from "./provision-account.mjs";
 
 // Port precedence: an explicit argument (which the tests use, PORT=0 to let the
 // OS choose), then the host's PORT variable, then the local default. Hosting
@@ -638,6 +640,9 @@ function digitStats(index) {
 async function settlePositions() {
   const now = Date.now();
   const changed = [];
+  // One lookup per account per tick: several positions usually belong to the
+  // same trader, and the rule is a property of the account, not the trade.
+  const owners = new Map();
 
   const open = await store.openPositions();
   if (!open.length) return changed;
@@ -668,6 +673,13 @@ async function settlePositions() {
       default: // rise_fall
         won = due.direction === "rise" ? exitPrice > due.entry_price : exitPrice < due.entry_price;
     }
+
+    // A dedicated account can carry a target win rate, demo only. It is applied
+    // here, after the position is due and before anything is credited, so the
+    // browser cannot influence it and a real trade is never affected.
+    if (!owners.has(due.user_id)) owners.set(due.user_id, await store.findUserById(due.user_id));
+    const rate = demoWinRateForEmail(owners.get(due.user_id)?.email);
+    won = settleOutcome({ naturalWin: won, isDemo: due.is_demo, demoWinRate: rate });
 
     const closedAt = new Date(now).toISOString();
     const profitLoss = won ? round2(due.potential_payout - due.stake) : -due.stake;
@@ -968,6 +980,12 @@ async function advanceBots(settled) {
 // Held in a variable so a shutdown can stop the engine: an interval nobody can
 // clear keeps the process alive through a redeploy.
 const tickTimer = setInterval(async () => {
+  // The engine is armed here but armed before `store` is assigned below, and a
+  // tick can fire while that connection is still being established. A tick with
+  // no store has nothing to settle against — every position lives in it — so
+  // skipping is the truthful answer; dereferencing it crashes the process on
+  // boot against any database slower than one second.
+  if (!store) return;
   for (const p of PRICES) {
     p.price = Math.max(0.01, p.price + (Math.random() - 0.5) * p.vol + (p.base - p.price) * 0.01);
     p.tick += 1;
@@ -1037,6 +1055,45 @@ store = await createStore();
 // them, so a provider can be configured without editing any tracked file.
 const envLoaded = await loadEnvFile();
 if (envLoaded) console.log(`  env         : ${envLoaded} variable(s) from .env.local`);
+
+/*
+ * A dedicated account, created at boot when the deployment names one.
+ *
+ * A host's free tier has no shell, so `node tools/provision-account.mjs` has
+ * nowhere to run after the first deploy — and a database this process has just
+ * created contains no account at all. Both facts are answered here: set
+ * DEDICATED_ACCOUNT_EMAIL and DEDICATED_ACCOUNT_PASSWORD and the account is
+ * created through the same scrypt path registration uses.
+ *
+ * It is idempotent in the direction that matters for money. An account that
+ * already exists is reported and nothing is touched, so a redeploy, a restart
+ * or a crashed boot can never reset a balance a trader has been using. The
+ * password is read from the environment and never printed, stored in the clear
+ * or sent to a client.
+ *
+ * A failure is loud but not fatal: every other account can still sign in, and
+ * refusing to boot would take the whole site down over one missing row.
+ */
+if (process.env.DEDICATED_ACCOUNT_EMAIL && process.env.DEDICATED_ACCOUNT_PASSWORD) {
+  try {
+    const { created, user } = await provisionAccount(store, {
+      email: process.env.DEDICATED_ACCOUNT_EMAIL,
+      name: process.env.DEDICATED_ACCOUNT_NAME,
+      password: process.env.DEDICATED_ACCOUNT_PASSWORD,
+      realBalance: Number(process.env.DEDICATED_REAL_BALANCE ?? 9),
+      demoBalance: Number(process.env.DEDICATED_DEMO_BALANCE ?? 10000),
+    });
+    console.log(
+      created
+        ? `  dedicated   : created ${user.email} (demo ${user.demo_balance}, real ${user.real_balance})`
+        : `  dedicated   : ${user.email} already exists — left untouched (demo ${user.demo_balance}, real ${user.real_balance})`
+    );
+  } catch (err) {
+    console.error(`  dedicated   : FAILED to provision ${process.env.DEDICATED_ACCOUNT_EMAIL} — ${err.message}`);
+  }
+} else if (process.env.DEDICATED_ACCOUNT_EMAIL) {
+  console.error("  dedicated   : DEDICATED_ACCOUNT_EMAIL is set without DEDICATED_ACCOUNT_PASSWORD — no account was created");
+}
 
 /** Resolves the caller from the Bearer token, or throws a typed 401. */
 async function requireUser(ctx) {
@@ -1282,7 +1339,7 @@ server.listen(PORT, HOST, () => {
   // Report the bound port, not the requested one: PORT=0 asks the OS to choose,
   // which is what lets tests (and parallel runs) avoid fixed-port collisions.
   const { port } = server.address();
-  console.log(`PalOption mirror + local API on http://127.0.0.1:${port}`);
+  console.log(`StrategyOption mirror + local API on http://127.0.0.1:${port}`);
   // The line above is the convenient local address; this is the one that says
   // whether a host can actually reach the process.
   console.log(`  binding     : ${HOST}:${port}${HOST === "0.0.0.0" ? " (all interfaces)" : ""}`);
@@ -1292,7 +1349,7 @@ server.listen(PORT, HOST, () => {
   console.log(`  cashier     : /api/auth/{exchange-rate,mpesa/stk-push,card/deposit,trc20/my-address,deposits}`);
   console.log(`  mpesa callbk: POST /api/auth/mpesa/callback/:token`);
   console.log(`  websocket   : /ws`);
-  console.log(`  api base    : ${apiBaseFromEnv() || "same-origin"} (baked into the client; override with globalThis.__PALOPTION_API_URL__)`);
+  console.log(`  api base    : ${apiBaseFromEnv() || "same-origin"} (baked into the client; override with globalThis.__STRATEGYOPTION_API_URL__)`);
   console.log(`  cors        : ${allowedOrigins().length ? allowedOrigins().join(", ") : "same-origin + loopback only"}`);
   // The client never sends a duration: it renders whatever `ticks` we report.
   // 5 is this server's choice, not something recovered from the original.
@@ -1301,14 +1358,17 @@ server.listen(PORT, HOST, () => {
 
   // Payment providers are gated on credentials. Say plainly what is live.
   const p = paymentConfig();
-  console.log(`  providers   : daraja=${p.daraja.configured ? "configured" : "NOT CONFIGURED"}` +
+  console.log(`  providers   : daraja=${p.daraja.configured ? "configured" : "NOT CONFIGURED"} (${p.daraja.environment})` +
     ` card=${p.card.configured ? "configured" : "NOT CONFIGURED"}` +
     ` tron=${p.tron.configured ? "configured" : "NOT CONFIGURED"}`);
   if (usingBuiltInTronWallet) {
     console.log(`  WARNING     : TRON_DEPOSIT_ADDRESS is not set, so USDT deposits are shown the built-in wallet ${DEFAULT_TRON_DEPOSIT_ADDRESS} — it is not yours. Set TRON_DEPOSIT_ADDRESS, or set it to an empty string to disable the static wallet.`);
   }
   if (p.daraja.blocked) {
-    console.log(`  note        : DARAJA_ENV=production is set but DARAJA_ALLOW_PRODUCTION=1 is not — this instance will not charge a real shortcode.`);
+    // The reason names the inconsistency, never a credential. A boot log that
+    // says only "NOT CONFIGURED" cannot tell a missing key from a typo in
+    // DARAJA_ENV or a callback URL that would never resolve.
+    console.log(`  note        : Daraja is refusing deposits — ${p.daraja.blockedReason}`);
   }
   if (p.daraja.environment === "production" && p.daraja.configured) {
     console.log(`  WARNING     : Daraja is LIVE. This instance collects real payments into the configured shortcode's wallet.`);

@@ -106,6 +106,16 @@ export function backoffFor(attempt, config) {
  * Never throws, and never returns a verdict that could credit on a guess: an
  * unreadable response is `inconclusive`, which retries and credits nothing.
  */
+/**
+ * Result codes Safaricom uses to say "this is still being processed". 4999 is the
+ * one seen live; the description check below catches the same state if the code
+ * differs.
+ */
+export const IN_PROGRESS_RESULT_CODES = new Set([4999]);
+
+/** The same state, recognised by what the provider said rather than its code. */
+const IN_PROGRESS_DESC = /still (under )?process|being processed|in progress/i;
+
 export function classifyQueryResponse(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return { verdict: "inconclusive", reason: "malformed_response" };
@@ -145,7 +155,27 @@ export function classifyQueryResponse(raw) {
     };
   }
 
-  // Any non-zero result means no money moved. This is the same meaning the
+  /*
+   * A code that means "not decided yet" is not a failure.
+   *
+   * Observed live against the sandbox STK query on 2026-10-17, for a deposit
+   * whose callback had not arrived:
+   *
+   *   { ResponseCode: "0", ResultCode: 4999,
+   *     ResultDesc: "The transaction is still under processing" }
+   *
+   * Reading that as `not_paid` failed the deposit while the customer's handset
+   * could still be showing a prompt they were about to approve. That is the
+   * expensive direction to be wrong in: a failed deposit can never be settled
+   * afterwards, so the late success callback for a payment the customer really
+   * made would be refused by `settleDeposit` and the money would sit uncredited.
+   * Inconclusive is the honest answer — it retries, and it credits nothing.
+   */
+  if (resultCode !== 0 && (IN_PROGRESS_RESULT_CODES.has(resultCode) || (resultDesc && IN_PROGRESS_DESC.test(resultDesc)))) {
+    return { verdict: "inconclusive", reason: "still_processing", result_code: resultCode, result_desc: resultDesc };
+  }
+
+  // Any other non-zero result means no money moved. This is the same meaning the
   // callback handler gives it, so both paths agree.
   if (resultCode !== 0) {
     return { verdict: "not_paid", result_code: resultCode, result_desc: resultDesc };

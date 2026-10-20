@@ -371,6 +371,42 @@ describe("deposit reconciliation", () => {
     assert.equal(classifyQueryResponse(notPaid("ws_CO_X", 1037, "DS timeout user cannot be reached")).verdict, "not_paid");
   });
 
+  test("7b. 'still processing' is not a failure (measured against the live sandbox query)", () => {
+    // Verbatim from the sandbox STK query on 2026-10-17, for a deposit whose
+    // callback had not arrived. Reading it as `not_paid` failed the deposit
+    // while the handset could still show a prompt about to be approved — and a
+    // failed deposit can never be credited, so a real payment would have been
+    // lost. It must stay inconclusive and retry.
+    const live = { ResponseCode: "0", ResultCode: "4999", ResultDesc: "The transaction is still under processing" };
+    const verdict = classifyQueryResponse(live);
+    assert.equal(verdict.verdict, "inconclusive");
+    assert.equal(verdict.reason, "still_processing");
+    assert.equal(verdict.result_code, 4999);
+
+    // The same state, recognised by its description when the code differs.
+    assert.equal(classifyQueryResponse({ ResponseCode: "0", ResultCode: "1", ResultDesc: "The transaction is being processed" }).verdict, "inconclusive");
+    // And the codes that really do mean no money moved still fail the deposit.
+    assert.equal(classifyQueryResponse(notPaid("ws_CO_X", 1032, "Request Cancelled by user.")).verdict, "not_paid");
+    assert.equal(classifyQueryResponse(notPaid("ws_CO_X", 1037, "DS timeout user cannot be reached.")).verdict, "not_paid");
+  });
+
+  test("7c. a 4999 answer leaves the deposit pending and retryable, crediting nothing", async () => {
+    const provider = scripted([
+      { ResponseCode: "0", ResultCode: "4999", ResultDesc: "The transaction is still under processing" },
+    ]);
+    const { store, user, reconciler } = makeWorld({ queryProvider: provider });
+    await seed(store, user, { reference: "PAL_STILL1", checkoutId: "ws_CO_STILL1" });
+
+    const summary = await reconciler.runOnce({ reason: "test" });
+
+    const deposit = stateOf(store, "PAL_STILL1");
+    assert.equal(deposit.status, "pending", "not decided is not failed");
+    assert.equal(deposit.recon_outcome, null, "not a terminal outcome");
+    assert.ok(deposit.next_reconcile_at, "it will be asked again");
+    assert.equal(summary.inconclusive, 1);
+    assert.equal(await balance(store, user), 0, "nothing credited");
+  });
+
   test("8. repeated reconciliation does not double-credit", async () => {
     const provider = scripted([paid("ws_CO_ONCE1", { receipt: "ONCE00000001" })]);
     const { store, user, reconciler } = makeWorld({ queryProvider: provider });

@@ -1,6 +1,6 @@
 {
-  "name": "PalOption",
-  "short_name": "PalOption",
+  "name": "StrategyOption",
+  "short_name": "StrategyOption",
   "description": "Trade binary options on synthetic indices",
   "start_url": "/trade",
   "display": "standalone",

@@ -19,7 +19,7 @@ import { spawn } from "node:child_process";
 import { createMemoryStore, round2, needsSsl } from "../tools/store.mjs";
 import { patchApiBase, apiBaseFromEnv } from "../tools/client-patches.mjs";
 
-const FRONTEND = "https://paloption.vercel.app";
+const FRONTEND = "https://strategyoption.vercel.app";
 
 function env(extra = {}) {
   return {
@@ -146,7 +146,7 @@ describe("origins, CORS and the API base", () => {
 
     const load = (source, { override, protocol = "https:" }) => {
       const exports = {};
-      globalThis.__PALOPTION_API_URL__ = override;
+      globalThis.__STRATEGYOPTION_API_URL__ = override;
       const mod = source.replace(/^74728,/, "");
       new Function("e", "location", "globalThis", `return (${mod})(e, {}, {});`)(
         { s: (t) => { for (let i = 0; i < t.length; i += 3) exports[t[i]] = t[i + 2]; } },
@@ -297,7 +297,7 @@ describe("choosing TLS from the connection string", () => {
   });
 
   test("the hosts that were already handled behave as before", () => {
-    assert.equal(needsSsl("postgresql://user:pw@localhost:5432/paloption"), false);
+    assert.equal(needsSsl("postgresql://user:pw@localhost:5432/strategyoption"), false);
     assert.equal(needsSsl("postgresql://u:p@host/db?sslmode=require"), true);
     assert.equal(needsSsl("postgresql://u:p@ep-x.us-east-2.aws.neon.tech/db"), true);
     assert.equal(needsSsl(""), false, "no connection string cannot mean a TLS requirement");

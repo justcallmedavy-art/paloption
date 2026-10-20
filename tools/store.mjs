@@ -116,6 +116,7 @@ const transactionFromRow = (r) =>
     reference: r.reference,
     is_demo: r.is_demo,
     status: r.status,
+    balance_after: r.balance_after == null ? null : Number(r.balance_after),
     created_at: iso(r.created_at),
   };
 
@@ -125,6 +126,11 @@ const depositFromRow = (r) =>
     user_id: r.user_id,
     reference: r.reference,
     method: r.method,
+    // Null for a method with no provider environment (cards today), and the
+    // provider's own name for M-Pesa.
+    environment: r.environment ?? null,
+    // The number the prompt went to, already masked on the way in.
+    msisdn_masked: r.msisdn_masked ?? null,
     amount: Number(r.amount),
     currency: r.currency,
     usd_amount: Number(r.usd_amount),
@@ -314,6 +320,7 @@ export function createMemoryStore({ db = emptyDb() } = {}) {
       if (!user) throw new Error("Account not found");
       if (Number(user[column] || 0) < Number(stake)) throw insufficient();
       user[column] = round2(Number(user[column]) - Number(stake));
+      if (transaction) transaction.balance_after = user[column];
       state.positions.unshift(position);
       state.transactions.unshift(transaction);
       return { settled: true, balance: user[column] };
@@ -379,6 +386,7 @@ export function createMemoryStore({ db = emptyDb() } = {}) {
       Object.assign(existing, position);
       const user = state.users.find((u) => u.id === userId);
       if (user && credit) user[column] = round2(Number(user[column] || 0) + Number(credit));
+      if (transaction) transaction.balance_after = user ? user[column] : null;
       if (transaction) state.transactions.unshift(transaction);
       return { settled: true, position: { ...existing }, balance: user ? user[column] : null };
     },
@@ -406,6 +414,8 @@ export function createMemoryStore({ db = emptyDb() } = {}) {
       deposit.last_reconciled_at ??= null;
       deposit.next_reconcile_at ??= null;
       deposit.recon_outcome ??= null;
+      deposit.environment ??= null;
+      deposit.msisdn_masked ??= null;
       state.deposits.unshift(deposit);
       return deposit;
     },
@@ -682,12 +692,13 @@ export async function createPostgresStore({ connectionString, ssl, poolSize = 10
         );
         if (transaction) {
           await q(
-            `INSERT INTO transactions (id, user_id, type, amount, currency, method, reference, is_demo, status, created_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, COALESCE($10::timestamptz, now()))`,
+            `INSERT INTO transactions (id, user_id, type, amount, currency, method, reference, is_demo, status, balance_after, created_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, COALESCE($11::timestamptz, now()))`,
             [
               transaction.id, transaction.user_id, transaction.type, transaction.amount,
               transaction.currency || "USD", transaction.method ?? null, transaction.reference ?? null,
-              !!transaction.is_demo, transaction.status || "completed", transaction.created_at ?? null,
+              !!transaction.is_demo, transaction.status || "completed", Number(rows[0].balance),
+              transaction.created_at ?? null,
             ]
           );
         }
@@ -761,16 +772,31 @@ export async function createPostgresStore({ connectionString, ssl, poolSize = 10
           ]
         );
         if (!rows[0]) return { settled: false };
-        if (credit) await q(`UPDATE users SET ${column} = ${column} + $2::numeric WHERE id = $1`, [userId, Number(credit)]);
+        // The ledger row records the balance it left behind, so the history
+        // explains itself. A win reads it from the UPDATE that credited it; a
+        // loss moved nothing, so it reads the (unchanged) balance directly —
+        // either way the number is the database's, not this process's.
+        let balanceAfter = null;
+        if (credit) {
+          const credited = await q(
+            `UPDATE users SET ${column} = ${column} + $2::numeric WHERE id = $1 RETURNING ${column} AS balance`,
+            [userId, Number(credit)]
+          );
+          balanceAfter = credited.rows[0] ? Number(credited.rows[0].balance) : null;
+        } else {
+          const { rows: held } = await q(`SELECT ${column} AS balance FROM users WHERE id = $1`, [userId]);
+          balanceAfter = held[0] ? Number(held[0].balance) : null;
+        }
         if (transaction) {
           await q(
-            `INSERT INTO transactions (id, user_id, type, amount, currency, method, reference, is_demo, status, created_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, COALESCE($10::timestamptz, now()))
+            `INSERT INTO transactions (id, user_id, type, amount, currency, method, reference, is_demo, status, balance_after, created_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, COALESCE($11::timestamptz, now()))
              ON CONFLICT (id) DO NOTHING`,
             [
               transaction.id, transaction.user_id, transaction.type, transaction.amount,
               transaction.currency || "USD", transaction.method ?? null, transaction.reference ?? null,
-              !!transaction.is_demo, transaction.status || "completed", transaction.created_at ?? null,
+              !!transaction.is_demo, transaction.status || "completed", balanceAfter,
+              transaction.created_at ?? null,
             ]
           );
         }
@@ -794,12 +820,14 @@ export async function createPostgresStore({ connectionString, ssl, poolSize = 10
       },
       async insertTransaction(transaction) {
         const { rows } = await q(
-          `INSERT INTO transactions (id, user_id, type, amount, currency, method, reference, is_demo, status, created_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, COALESCE($10::timestamptz, now())) RETURNING *`,
+          `INSERT INTO transactions (id, user_id, type, amount, currency, method, reference, is_demo, status, balance_after, created_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, COALESCE($11::timestamptz, now())) RETURNING *`,
           [
             transaction.id, transaction.user_id, transaction.type, transaction.amount,
             transaction.currency || "USD", transaction.method ?? null, transaction.reference ?? null,
-            !!transaction.is_demo, transaction.status || "completed", transaction.created_at ?? null,
+            !!transaction.is_demo, transaction.status || "completed",
+            transaction.balance_after == null ? null : Number(transaction.balance_after),
+            transaction.created_at ?? null,
           ]
         );
         return transactionFromRow(rows[0]);
@@ -808,16 +836,18 @@ export async function createPostgresStore({ connectionString, ssl, poolSize = 10
       /* deposits */
       async insertDeposit(deposit) {
         const { rows } = await q(
-          `INSERT INTO deposits (id, user_id, reference, method, amount, currency, usd_amount, settlement_currency,
-                                 settlement_amount, settlement_rate, status, is_demo, provider_reference,
-                                 checkout_request_id, merchant_request_id, failure_reason, created_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, COALESCE($17::timestamptz, now()))
+          `INSERT INTO deposits (id, user_id, reference, method, environment, msisdn_masked, amount, currency,
+                                 usd_amount, settlement_currency, settlement_amount, settlement_rate, status, is_demo,
+                                 provider_reference, checkout_request_id, merchant_request_id, failure_reason, created_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18, COALESCE($19::timestamptz, now()))
            RETURNING *`,
           [
-            deposit.id, deposit.user_id, deposit.reference, deposit.method, deposit.amount,
-            deposit.currency || "USD", deposit.usd_amount ?? deposit.amount, deposit.settlement_currency ?? null,
-            deposit.settlement_amount ?? null, deposit.settlement_rate ?? null, deposit.status,
-            !!deposit.is_demo, deposit.provider_reference ?? null, deposit.checkout_request_id ?? null,
+            deposit.id, deposit.user_id, deposit.reference, deposit.method, deposit.environment ?? null,
+            deposit.msisdn_masked ?? null,
+            deposit.amount, deposit.currency || "USD", deposit.usd_amount ?? deposit.amount,
+            deposit.settlement_currency ?? null, deposit.settlement_amount ?? null,
+            deposit.settlement_rate ?? null, deposit.status, !!deposit.is_demo,
+            deposit.provider_reference ?? null, deposit.checkout_request_id ?? null,
             deposit.merchant_request_id ?? null, deposit.failure_reason ?? null, deposit.created_at ?? null,
           ]
         );

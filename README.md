@@ -1,4 +1,4 @@
-# PalOption
+# StrategyOption
 
 Two things live here:
 
@@ -9,7 +9,7 @@ Two things live here:
   [MIRROR.md](MIRROR.md) for what is real and what is a mirror, and the
   [deployment guide](DEPLOY.md) for the split frontend/backend setup.
 - **The landing page** — a static, offline-capable rebuild of
-  `https://paloptions.com/`, served at `/landing`.
+  `https://strategyoptions.com/`, served at `/landing`.
 
 ## Run it locally
 
@@ -42,7 +42,7 @@ push to `main` and every pull request. None of them needs a credential:
 
 The fourth job exists because a frontend cannot fail visibly. The client is a
 static snapshot whose only link to the backend is a value baked into its bundles
-when they are built, so a snapshot built without `PALOPTION_API_URL` answers 200
+when they are built, so a snapshot built without `STRATEGYOPTION_API_URL` answers 200
 on every page and then calls its own host, which returns `404 NOT_FOUND` — a
 sign-in that cannot work, from the outside indistinguishable from a working site.
 The job builds the snapshot the way `npm run deploy:prod` does, serves it, and
@@ -56,12 +56,12 @@ it is skipped until you give it something to judge. Set both repository variable
 
 | Variable | Value |
 | --- | --- |
-| `PRODUCTION_FRONTEND_URL` | e.g. `https://paloption.vercel.app` |
-| `PRODUCTION_API_URL` | e.g. `https://paloption-api.onrender.com` |
+| `PRODUCTION_FRONTEND_URL` | e.g. `https://strategyoption.vercel.app` |
+| `PRODUCTION_API_URL` | e.g. `https://strategyoption-api.onrender.com` |
 
 Once they are set it runs on every push to `main` and fails on a stale deploy
 (the served bundles differ from a fresh build of the same commit) or a backend
-that does not answer `/healthz` with a Postgres ledger. `PALOPTION_API_URL`,
+that does not answer `/healthz` with a Postgres ledger. `STRATEGYOPTION_API_URL`,
 unset, defaults to the host `render.yaml` provisions.
 
 The database job starts a throwaway PostgreSQL, applies the real schema with
@@ -104,13 +104,19 @@ the payments work.
 
 The push itself — where the credential is stored, the two permissions it needs,
 and what each rejection means — is §9 of [DEPLOY.md](DEPLOY.md), along with `npm run verify:credential`, which
-checks the whole thing against GitHub.
+checks the whole thing against GitHub. The same section documents the **push
+guard**: `npm run guard:push` says whether the commits leaving this branch
+change anything under `.github/workflows/`, a change there needs a stated reason,
+and `npm run guard:install` makes the committed pre-push hook ask that question on
+every push. Its rules are covered by `npm test`, which is all CI does here — a
+runner cannot tell an intended workflow edit from an unintended one, so the
+guard is a local failsafe and a ruleset is what enforces review.
 
 ## Architecture, in one paragraph
 
 The client asks one module where the server is (`getApiUrl`), and everything
 follows from it: `/api/*` over https, `/ws` over wss. Left unset, that is
-same-origin — the single-host case. Set `PALOPTION_API_URL` and the frontend can
+same-origin — the single-host case. Set `STRATEGYOPTION_API_URL` and the frontend can
 live on Vercel while the API runs wherever a long-lived Node process belongs.
 The API accepts browser calls only from origins in `ALLOWED_ORIGINS`, and the
 same list gates the WebSocket, which CORS would otherwise not cover. Balances,
@@ -122,7 +128,7 @@ one process.
 
 ## The landing page
 
-A static, offline-capable rebuild of the `https://paloptions.com/` landing page
+A static, offline-capable rebuild of the `https://strategyoptions.com/` landing page
 (originally a Next.js + Tailwind app). No framework, no runtime dependencies —
 just hand-written HTML plus a compiled Tailwind stylesheet.
 

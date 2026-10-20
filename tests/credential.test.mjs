@@ -38,11 +38,11 @@ const checkFor = (checks, fragment) => checks.find((check) => check.name.include
 /** What GitHub sent when the workflow probe was refused, verbatim. */
 const WORKFLOW_REFUSAL =
   " ! [remote rejected] workflow-push-probe -> workflow-push-probe (refusing to allow a Personal Access Token to create or update workflow `.github/workflows/ci.yml` without `workflow` scope)\n" +
-  "error: failed to push some refs to 'https://github.com/justcallmedavy-art/paloption.git'";
+  "error: failed to push some refs to 'https://github.com/justcallmedavy-art/strategyoption.git'";
 
 const AUTH_REFUSAL =
   "remote: Invalid username or token. Password authentication is not supported for Git operations.\n" +
-  "fatal: Authentication failed for 'https://github.com/justcallmedavy-art/paloption.git/'";
+  "fatal: Authentication failed for 'https://github.com/justcallmedavy-art/strategyoption.git/'";
 
 /** A healthy set of gathered facts, with each test overriding one thing. */
 function facts(overrides = {}) {
@@ -83,10 +83,10 @@ describe("classifyToken", () => {
 
 describe("parseRemote", () => {
   test("reads the owner and repository out of an HTTPS remote", () => {
-    assert.deepEqual(parseRemote("https://github.com/justcallmedavy-art/paloption.git"), {
+    assert.deepEqual(parseRemote("https://github.com/justcallmedavy-art/strategyoption.git"), {
       host: "github.com",
       owner: "justcallmedavy-art",
-      repo: "paloption",
+      repo: "strategyoption",
     });
   });
 
@@ -95,10 +95,10 @@ describe("parseRemote", () => {
   });
 
   test("reads an SSH remote too, because the shape decides whether a token is involved", () => {
-    assert.deepEqual(parseRemote("git@github.com:justcallmedavy-art/paloption.git"), {
+    assert.deepEqual(parseRemote("git@github.com:justcallmedavy-art/strategyoption.git"), {
       host: "github.com",
       owner: "justcallmedavy-art",
-      repo: "paloption",
+      repo: "strategyoption",
     });
   });
 

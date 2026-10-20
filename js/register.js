@@ -65,10 +65,10 @@
     label.classList.add("hidden");
     spinner.classList.remove("hidden");
 
-    PalOption.api
+    StrategyOption.api
       .register(fullName, pass, email)
       .then(function () {
-        PalOption.toast("Account created — welcome to PalOption", "success");
+        StrategyOption.toast("Account created — welcome to StrategyOption", "success");
         setTimeout(function () { location.href = "trade.html"; }, 500);
       })
       .catch(function (err) {
